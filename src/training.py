@@ -116,7 +116,7 @@ class Trainer:
             self.metrics[key] = self.fabric.setup_module(self.metrics[key])
 
     def start_training(self, cfg: dict, tags: dict):
-        with mlflow.start_run():
+        with mlflow.start_run() as run:
             # Logs for current and all epochs
             logs = {}
             history = {}
@@ -124,6 +124,7 @@ class Trainer:
             # Log things that won't change
             mlflow.set_tags(tags)
             mlflow.log_params(cfg)
+            print(f'Started run {run.info.run_name} ({run.info.run_id})')
 
             # Reset early stop state
             self.cb['early_stop'].on_train_begin()
@@ -227,6 +228,8 @@ class Trainer:
                         epoch + 1
                     )
                     break
+
+        print(f'Stopped run {run.info.run_name} ({run.info.run_id})')
 
 def run(cfg: dict, tags: dict):
     exp_name = 'pawpaw-experiment'
