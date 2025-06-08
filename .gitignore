@@ -1,2 +1,6 @@
-mlartifacts/
-mlruns/
+# All directories
+__pycache__/
+
+# Root directory only
+/mlartifacts/
+/mlruns/
