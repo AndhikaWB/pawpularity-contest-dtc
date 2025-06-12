@@ -115,7 +115,7 @@ class Trainer:
         for key in self.metrics.keys():
             self.metrics[key] = self.fabric.setup_module(self.metrics[key])
 
-    def start_training(self, cfg: dict, tags: dict):
+    def start_training(self, cfg: dict, tags: dict) -> str:
         with mlflow.start_run() as run:
             # Logs for current and all epochs
             logs = {}
@@ -195,7 +195,7 @@ class Trainer:
 
                     mlflow.pytorch.log_model(
                         self.model,
-                        artifact_path = cfg['model_dir'],
+                        artifact_path = 'model',
                         conda_env = 'conda.yaml',
                         signature = mlflow.models.infer_signature(
                             model_input = {
@@ -230,9 +230,11 @@ class Trainer:
                     break
 
         print(f'Stopped run {run.info.run_name} ({run.info.run_id})')
+        return run.info.run_id
 
 def run(cfg: dict, tags: dict):
     exp_name = 'pawpaw-experiment'
+    reg_model_name = 'pawpaw-model'
     print(f'{tags['developer']} is starting a new run for {exp_name}...')
 
     # Set MLFlow to track current experiment
@@ -246,7 +248,13 @@ def run(cfg: dict, tags: dict):
 
     model = PawModel()
     trainer = Trainer(model, train_loader, val_loader, cfg)
-    trainer.start_training(cfg, tags)
+    run_id = trainer.start_training(cfg, tags, reg_model_name)
+
+    # Register model from the last run
+    mlflow.register_model(
+        f'runs:/{run_id}/model',
+        reg_model_name
+    )
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
