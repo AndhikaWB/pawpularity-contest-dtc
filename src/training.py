@@ -107,7 +107,6 @@ class Trainer:
         # Initiate Fabric to move all tensors to GPU
         # Without having to call "to_device" everywhere
         self.fabric = Fabric(accelerator = 'gpu')
-        self.fabric.seed_everything(cfg['seed'])
 
         self.model, self.optimizer = self.fabric.setup(self.model, self.optimizer)
         self.train_loader = self.fabric.setup_dataloaders(self.train_loader)
@@ -241,6 +240,9 @@ def run(cfg: dict, tags: dict):
     mlflow.set_tracking_uri('http://localhost:5000')
     mlflow.set_experiment(exp_name)
     mlflow.enable_system_metrics_logging()
+
+    # Set seed for reproducible experiment
+    Fabric.seed_everything(cfg['seed'])
 
     df_train, df_val = read_dataframe(cfg)
     train_loader = preprocess_data(df_train, cfg, is_train_data = True)

@@ -2,6 +2,6 @@
 __pycache__/
 
 # Root directory only
-/mlartifacts/
-/mlruns/
+/mlflow/mlruns.db
+/mlflow/mlartifacts
 /model/*
