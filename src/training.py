@@ -1,4 +1,5 @@
-import random
+import os
+import shutil
 import argparse
 import mlflow
 import polars as pl
@@ -13,6 +14,7 @@ from lightning.fabric import Fabric
 
 from _model import PawDataset, PawModel
 from _helper import EarlyStopping, LossWrapper, QSave
+from _typing import TrainParams, TrainTags
 
 
 def read_dataframe(cfg: dict) -> tuple:
@@ -59,7 +61,7 @@ def preprocess_data(df: pl.DataFrame, cfg: dict, is_train_data: bool) -> DataLoa
             transform = v2.Compose(transform)
         ),
         batch_size = cfg['batch_size'],
-        shuffle = True
+        shuffle = True if is_train_data else False
     )
 
     return loader
@@ -194,6 +196,7 @@ class Trainer:
 
                     mlflow.pytorch.log_model(
                         self.model,
+                        # MLFlow artifact path is not local folder
                         artifact_path = 'model',
                         conda_env = 'conda.yaml',
                         signature = mlflow.models.infer_signature(
@@ -205,12 +208,14 @@ class Trainer:
                         )
                     )
 
-                    # MLFlow artifacts are stored on a different base directory
-                    # So the paths below are not the same dir as the artifact path above
+                    # Local folder for temporarily storing other file artifacts
+                    # The files will be copied to MLFlow artifact path after calling "log_artifacts"
+                    shutil.rmtree(cfg['model_dir'], ignore_errors = True)
+                    os.makedirs(cfg['model_dir'], exist_ok = True)
+
                     torch.save(self.optimizer.state_dict(), cfg['model_dir'] + '/optimizer.pth')
                     QSave.save(self.model_str, cfg['model_dir'] + '/model.txt')
                     QSave.save(history, cfg['model_dir'] + '/history.json')
-                    # This will copy above files to artifacts folder
                     mlflow.log_artifacts(cfg['model_dir'])
 
                     self.fabric.barrier()
@@ -233,7 +238,7 @@ class Trainer:
 
 def run(cfg: dict, tags: dict):
     exp_name = 'pawpaw-experiment'
-    reg_model_name = 'pawpaw-model'
+    reg_model_name = 'dev.pawpaw-model'
     print(f'{tags['developer']} is starting a new run for {exp_name}...')
 
     # Set MLFlow to track current experiment

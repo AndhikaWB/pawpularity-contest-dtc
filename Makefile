@@ -16,3 +16,11 @@ mlflow:
 train:
 	conda activate pytorch
 	python src/training.py
+
+airflow:
+	cd docker
+	docker compose up
+
+airflowd:
+	cd docker
+	docker compose down

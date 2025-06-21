@@ -1,7 +1,9 @@
-# All directories
+# Junk folders
 __pycache__/
 
-# Root directory only
-/mlflow/mlruns.db
-/mlflow/mlartifacts
-/model/*
+# Temporary folders
+/model/
+
+# Docker shared volumes
+/docker/*
+!/docker/compose.yaml
