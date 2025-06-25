@@ -17,10 +17,12 @@ train:
 	conda activate pytorch
 	python src/training.py
 
-airflow:
+compose:
 	cd docker
-	docker compose up
+	docker compose --env-file .env.dev up
 
-airflowd:
+composed:
 	cd docker
-	docker compose down
+	rm -rf home
+	rm -rf var
+	docker compose --env-file .env.dev down

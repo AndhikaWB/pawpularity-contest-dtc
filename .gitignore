@@ -3,7 +3,10 @@ __pycache__/
 
 # Temporary folders
 /model/
+/data/
 
 # Docker shared volumes
 /docker/*
+!/docker/init
+!/docker/.env.example
 !/docker/compose.yaml

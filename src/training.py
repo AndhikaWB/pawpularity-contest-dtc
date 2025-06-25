@@ -1,6 +1,5 @@
 import os
 import shutil
-import argparse
 import mlflow
 import polars as pl
 
@@ -14,12 +13,15 @@ from lightning.fabric import Fabric
 
 from _model import PawDataset, PawModel
 from _helper import EarlyStopping, LossWrapper, QSave
-from _typing import TrainParams, TrainTags
+from _field import TrainSettings, TrainParams, TrainTags, MLFlowSettings
+
+from prefect import task
+from prefect.assets import materialize
 
 
-def read_dataframe(cfg: dict) -> tuple:
-    df = pl.read_csv(cfg['csv_path'])
-    df = df.sample(cfg['sample_size'], shuffle = True, seed = cfg['seed'])
+def read_data(cfg: TrainParams) -> tuple:
+    df = pl.read_csv(cfg.csv_path)
+    df = df.sample(cfg.sample_size, shuffle = True, seed = cfg.seed)
 
     # Train-validation split (80/20)
     df_val = df.tail(int(0.2 * len(df)))
@@ -27,9 +29,9 @@ def read_dataframe(cfg: dict) -> tuple:
 
     return df_train, df_val
 
-def preprocess_data(df: pl.DataFrame, cfg: dict, is_train_data: bool) -> DataLoader:
+def preprocess_data(df: pl.DataFrame, cfg: TrainParams, is_train_data: bool) -> DataLoader:
     # Resize all images to have the same size
-    img_transform = [ v2.Resize(cfg['img_size']) ]
+    img_transform = [ v2.Resize(cfg.img_size) ]
     # Convert all data types to have the same type
     transform = [ v2.ToDtype(torch.float32) ]
 
@@ -56,11 +58,11 @@ def preprocess_data(df: pl.DataFrame, cfg: dict, is_train_data: bool) -> DataLoa
     loader = DataLoader(
         PawDataset(
             df,
-            img_dir = cfg['img_dir'],
+            img_dir = cfg.img_dir,
             img_transform = v2.Compose(img_transform),
             transform = v2.Compose(transform)
         ),
-        batch_size = cfg['batch_size'],
+        batch_size = cfg.batch_size,
         shuffle = True if is_train_data else False
     )
 
@@ -80,8 +82,8 @@ class Trainer:
 
         self.prep_training(cfg)
 
-    def prep_training(self, cfg: dict):
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr = cfg['lr'])
+    def prep_training(self, cfg: TrainParams):
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr = cfg.lr)
         self.criterion = torch.nn.BCELoss()
 
         self.metrics = {
@@ -91,8 +93,8 @@ class Trainer:
 
         self.cb = {
             'early_stop': EarlyStopping(
-                monitor = 'val_bce',
-                patience = cfg['patience'],
+                monitor = cfg.monitor,
+                patience = cfg.patience,
                 mode = 'min'
             )
         }
@@ -100,8 +102,8 @@ class Trainer:
         # ----------
 
         # Fabric will change things so we should save some info before
-        cfg['optimizer'] = self.optimizer.__class__.__name__
-        cfg['criterion'] = self.criterion.__class__.__name__
+        cfg.optimizer = self.optimizer.__class__.__name__
+        cfg.criterion = self.criterion.__class__.__name__
         self.model_str = str(self.model)
 
         # ----------
@@ -236,66 +238,50 @@ class Trainer:
         print(f'Stopped run {run.info.run_name} ({run.info.run_id})')
         return run.info.run_id
 
-def run(cfg: dict, tags: dict):
-    exp_name = 'pawpaw-experiment'
-    reg_model_name = 'dev.pawpaw-model'
-    print(f'{tags['developer']} is starting a new run for {exp_name}...')
+def run(cfg: TrainParams, tags: TrainTags, mlf: MLFlowSettings):
+    # Validate all input parameters
+    cfg = TrainParams.model_validate(cfg)
+    tags = TrainTags.model_validate(tags)
+    mlf = MLFlowSettings.model_validate(mlf)
+
+    print(f'{tags.author} is starting a new run for {mlf.exp_name}...')
 
     # Set MLFlow to track current experiment
-    mlflow.set_tracking_uri('http://localhost:5000')
-    mlflow.set_experiment(exp_name)
+    mlflow.set_tracking_uri(mlf.tracking_uri)
+    mlflow.set_experiment(mlf.exp_name)
     mlflow.enable_system_metrics_logging()
 
     # Set seed for reproducible experiment
-    Fabric.seed_everything(cfg['seed'])
+    Fabric.seed_everything(cfg.seed)
 
-    df_train, df_val = read_dataframe(cfg)
+    df_train, df_val = read_data(cfg)
     train_loader = preprocess_data(df_train, cfg, is_train_data = True)
     val_loader = preprocess_data(df_val, cfg, is_train_data = False)
 
     model = PawModel()
     trainer = Trainer(model, train_loader, val_loader, cfg)
-    run_id = trainer.start_training(cfg, tags, reg_model_name)
+    run_id = trainer.start_training(cfg, tags, mlf.reg_model_name)
 
     # Register model from the last run
     mlflow.register_model(
         f'runs:/{run_id}/model',
-        reg_model_name
+        mlf.reg_model_name
     )
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(
-        description = 'Train model to predict pet popularity'
-    )
+    # It will read parameters passed from CLI
+    args = TrainSettings()
 
-    parser.add_argument('--csv-path', type = str, default = '../data/train.csv')
-    parser.add_argument('--img-dir', type = str, default = '../data/train')
-    parser.add_argument('--sample-size', type = int, default = 1000)
-    parser.add_argument('--epochs', type = int, default = 20)
-    parser.add_argument('--seed', type = int, default = 1337)
-    parser.add_argument('--save-model-dir', type = str, default = 'model')
-    parser.add_argument('--developer-name', type = str, default = 'YourName')
-    args = parser.parse_args()
+    # Only override tags if not passed from CLI
+    if not args.tags:
+        args.tags = TrainTags(
+            author = 'Andhika',
+            lib = 'PyTorch',
+            model = 'CNN',
+            ext = 'py'
+        )
 
-    cfg = {
-        'csv_path': args.csv_path,
-        'img_dir': args.img_dir,
-        'model_dir': args.save_model_dir,
-        'sample_size': args.sample_size,
-        'img_size': (128, 128),
-        'seed': args.seed,
-        'lr': 0.001,
-        'batch_size': 64,
-        'epochs': args.epochs,
-        'monitor': 'val_bce',
-        'patience': 5
-    }
+    # Use default MLFlow settings
+    mlf = MLFlowSettings()
 
-    tags = {
-        'developer': args.developer_name,
-        'model': 'PyTorch',
-        'format': 'ipynb',
-        'type': 'CNN'
-    }
-
-    run(cfg, tags)
+    run(args.params, args.tags, mlf)
