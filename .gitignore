@@ -7,6 +7,5 @@ __pycache__/
 
 # Docker shared volumes
 /docker/*
-!/docker/init
-!/docker/.env.example
+!/docker/.env.dev
 !/docker/compose.yaml

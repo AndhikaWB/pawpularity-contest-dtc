@@ -57,9 +57,9 @@ services:
           aws s3 mb "s3://${MLFLOW_MODEL_BUCKET_NAME}"
         fi
 
-        if [[ ! -z $$(aws s3api head-bucket --bucket "${LAKEFS_DATA_BUCKET_NAME}" 2>&1) ]]; then
-          echo "Creating new bucket for storing LakeFS data repos..."
-          aws s3 mb "s3://${LAKEFS_DATA_BUCKET_NAME}"
+        if [[ ! -z $$(aws s3api head-bucket --bucket "${DVC_DATA_BUCKET_NAME}" 2>&1) ]]; then
+          echo "Creating new bucket for storing DVC versioned data..."
+          aws s3 mb "s3://${DVC_DATA_BUCKET_NAME}"
         fi
 
   mlflow:
@@ -81,7 +81,7 @@ services:
         - |
           echo "Installing Python boto3 dependency..."
           echo "boto3 version between MLFlow server and client must be the same!"
-          pip install boto3==1.38.38
+          pip install boto3==1.38.27 --no-cache-dir
 
           echo "Starting MLFlow UI server..."
           mlflow ui -h 0.0.0.0 -p 5000 \
@@ -96,24 +96,3 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
-
-  # postgres:
-  #   image: postgres:latest
-  #   environment:
-  #     # Set password for the default "postgres" superuser
-  #     POSTGRES_PASSWORD: postgres123
-  #   volumes:
-  #     # Postgres data directory
-  #     - ./var/lib/postgresql/data:/var/lib/postgresql/data
-  #     # Create new lakeFS user and database
-  #     - ./init/lakefs.sql:/docker-entrypoint-initdb.d/lakefs.sql
-  #   ports:
-  #     # Postgres connection port
-  #     - 5432:5432
-  #   healthcheck:
-  #     test: ["CMD", "pg_isready", "-U", "lakefs"]
-  #     start_period: 30s
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-  #   restart: unless-stopped

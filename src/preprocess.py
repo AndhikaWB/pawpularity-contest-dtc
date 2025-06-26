@@ -2,7 +2,7 @@ import os
 import polars as pl
 import lakefs
 
-from _dvc import dvc_exec
+from _dvc import DvcExec
 from _field import LakeFSSettings
 
 def pull_data(source_uri: str, local_dir: str) -> str:
@@ -38,28 +38,30 @@ def preprocess(local_dir: str, preproc_dir: str, lakefs_opt = LakeFSSettings) ->
     df_val.write_csv(f'{preproc_dir}/val.csv')
     df_test.write_csv(f'{preproc_dir}/test.csv')
 
-    print(f'Uploading preprocessed data to lakeFS...')
-
-    dvc_exec('init --no-scm', preproc_dir)
-    dvc_exec('remote add s3://')
-    
-
     return preproc_dir
 
 def commit_data(preproc_dir: str, remote_dir: str) -> str:
+    dvc = DvcExec(cwd = preproc_dir)
+    dvc.exec('init --no-scm -f')
+    dvc.exec(f'remote add pawpaw {remote_dir} -f')
+    dvc.exec('add *.csv --glob', error = True)
 
     print(f'Commiting local changes in {preproc_dir}...')
-
+    dvc.exec('commit')
 
     print(f'Pushing new data to {preproc_dir}...')
-    pass
+    dvc.exec('push -r pawpaw')
 
 def run():
     local_dir = pull_data('s3://whatever', 'data/raw')
     preproc_dir = preprocess(local_dir, 'data/preprocessed')
 
-    remote_dir = commit_data(preproc_dir)
+    remote_dir = commit_data(preproc_dir, 's3://dvc/pawpaw')
 
 
 if __name__ == '__main__':
+    os.environ['AWS_ACCESS_KEY_ID'] = 'admin'
+    os.environ['AWS_SECRET_ACCESS_KEY'] = 'admin123'
+    os.environ['AWS_ENDPOINT_URL'] = 'http://localhost:9000'
+
     run()
