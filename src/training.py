@@ -1,287 +1,185 @@
-import os
-import shutil
+import warnings
+import tempfile
+from pathlib import Path
+from copy import deepcopy
+
 import mlflow
-import polars as pl
+from _ml.trainer import Trainer
+from _ml.model import PawDataLoader, PawModel
 
-import torch
-from torch import nn
-from torch.utils.data import DataLoader
-from torchvision.transforms import v2
+import dotenv
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from _pydantic.shared import S3Conf, LakeFSConf, MLFlowConf
+from _pydantic.train_test import TrainParams, TrainTags, MLFlowModel
 
-import torchmetrics as tm
-from lightning.fabric import Fabric
-
-from _model import PawDataset, PawModel
-from _helper import EarlyStopping, LossWrapper, QSave
-from _field import TrainSettings, TrainParams, TrainTags, MLFlowSettings
-
-from prefect import task
-from prefect.assets import materialize
+import lakefs
+from _s3.utils import get_repo_branch
 
 
-def read_data(cfg: TrainParams) -> tuple:
-    df = pl.read_csv(cfg.csv_path)
-    df = df.sample(cfg.sample_size, shuffle = True, seed = cfg.seed)
+def get_data_commit_id(data_source_repo: str, lfs_cfg: LakeFSConf) -> str:
+    client = lakefs.Client(**dict(lfs_cfg))
 
-    # Train-validation split (80/20)
-    df_val = df.tail(int(0.2 * len(df)))
-    df_train = df.head(len(df) - len(df_val))
+    # Get the branch name or commit id from the input URI
+    # E.g. s3://my-repo/main or s3://my-repo/64675c312d48be7e
+    repo_id, ref_id = get_repo_branch(data_source_repo)
+    ref = lakefs.Reference(repo_id, ref_id, client = client)
 
-    return df_train, df_val
+    # But we should only return a commit id, not branch name
+    # This commit id will be logged as MLFlow parameter later
+    commit_id = ref.get_commit().id
+    print(f'Using commit "{commit_id[:8]}" from data repo "{repo_id}"')
 
-def preprocess_data(df: pl.DataFrame, cfg: TrainParams, is_train_data: bool) -> DataLoader:
-    # Resize all images to have the same size
-    img_transform = [ v2.Resize(cfg.img_size) ]
-    # Convert all data types to have the same type
-    transform = [ v2.ToDtype(torch.float32) ]
+    return commit_id
 
-    # When training, apply random transformations
-    # Otherwise, leave the image untouched
-    if is_train_data:
-        img_transform += [
-            v2.RandomChoice([
-                v2.RandomAffine(
-                    # 2D Rotation
-                    degrees = [-180, 180],
-                    # 3D rotation
-                    shear = [-25, 25]
-                ),
-                v2.ColorJitter(
-                    contrast = [0.9, 1.1],
-                    saturation = [0.9, 1.1],
-                    hue = [-0.1, 0.1]
-                )
-            ])
-        ]
 
-    # Pass the dataset to the dataloader
-    loader = DataLoader(
-        PawDataset(
-            df,
-            img_dir = cfg.img_dir,
-            img_transform = v2.Compose(img_transform),
-            transform = v2.Compose(transform)
-        ),
-        batch_size = cfg.batch_size,
-        shuffle = True if is_train_data else False
+def model_training(
+    params: TrainParams, tags: TrainTags, s3_cfg: S3Conf, mlf_cfg: MLFlowConf
+) -> TrainParams:
+    if not (params.csv_dir and params.img_dir):
+        raise ValueError('CSV and image directory can\'t be empty')
+
+    # Use the same cache dir for train and val data
+    # Only do this if you're certain there's no file conflict
+    cache_dir = tempfile.TemporaryDirectory()
+
+    train_loader = PawDataLoader(
+        params.csv_dir + '/train.csv',
+        img_dir = params.img_dir,
+        is_train_data = True,
+        batch_size = params.batch_size,
+        img_size = params.img_size,
+        s3_cfg = s3_cfg,
+        cache_dir = cache_dir.name
     )
 
-    return loader
-
-class Trainer:
-    def __init__(
-        self,
-        model: nn.Module,
-        train_loader: DataLoader,
-        val_loader: DataLoader,
-        cfg: dict
-    ):
-        self.model = model
-        self.train_loader = train_loader
-        self.val_loader = val_loader
-
-        self.prep_training(cfg)
-
-    def prep_training(self, cfg: TrainParams):
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr = cfg.lr)
-        self.criterion = torch.nn.BCELoss()
-
-        self.metrics = {
-            'bce': LossWrapper(torch.nn.BCELoss),
-            'rmse': tm.MeanSquaredError(squared = False)
-        }
-
-        self.cb = {
-            'early_stop': EarlyStopping(
-                monitor = cfg.monitor,
-                patience = cfg.patience,
-                mode = 'min'
-            )
-        }
-
-        # ----------
-
-        # Fabric will change things so we should save some info before
-        cfg.optimizer = self.optimizer.__class__.__name__
-        cfg.criterion = self.criterion.__class__.__name__
-        self.model_str = str(self.model)
-
-        # ----------
-
-        # Initiate Fabric to move all tensors to GPU
-        # Without having to call "to_device" everywhere
-        self.fabric = Fabric(accelerator = 'gpu')
-
-        self.model, self.optimizer = self.fabric.setup(self.model, self.optimizer)
-        self.train_loader = self.fabric.setup_dataloaders(self.train_loader)
-        self.val_loader = self.fabric.setup_dataloaders(self.val_loader)
-        for key in self.metrics.keys():
-            self.metrics[key] = self.fabric.setup_module(self.metrics[key])
-
-    def start_training(self, cfg: dict, tags: dict) -> str:
-        with mlflow.start_run() as run:
-            # Logs for current and all epochs
-            logs = {}
-            history = {}
-
-            # Log things that won't change
-            mlflow.set_tags(tags)
-            mlflow.log_params(cfg)
-            print(f'Started run {run.info.run_name} ({run.info.run_id})')
-
-            # Reset early stop state
-            self.cb['early_stop'].on_train_begin()
-
-            # ----------
-
-            for epoch in range(1, cfg['epochs'] + 1):
-                # ----------
-                # Training epoch start
-
-                self.model.train()
-
-                for step, ds in enumerate(self.train_loader):
-                    preds = self.model(ds['image'], ds['features'])
-                    loss = self.criterion(preds, ds['target'])
-
-                    # Backward pass
-                    self.optimizer.zero_grad()
-                    self.fabric.backward(loss)
-                    # Update parameters (weights)
-                    self.optimizer.step()
-
-                    for name in self.metrics:
-                        self.metrics[name](preds, ds['target'])
-
-                # ----------
-                # Training epoch end
-
-                for name in self.metrics:
-                    logs[name] = self.metrics[name].compute().item()
-                    self.metrics[name].reset()
-
-                # ----------
-                # Validation epoch start
-
-                self.model.eval()
-
-                with torch.no_grad():
-                    for step, ds in enumerate(self.val_loader):
-                        preds = self.model(ds['image'], ds['features'])
-
-                        for name in self.metrics:
-                            self.metrics[name](preds, ds['target'])
-
-                # ----------
-                # Validation epoch end
-
-                for name in self.metrics:
-                    logs['val_' + name] = self.metrics[name].compute().item()
-                    self.metrics[name].reset()
-
-                self.cb['early_stop'].on_epoch_end(epoch, logs)
-
-                # ----------
-                # Misc at the end of each epoch
-
-                logs['epoch'] = epoch
-                print(f'End of epoch {epoch}: {logs}')
-
-                # Append current epoch logs to history
-                for name in logs.keys():
-                    result = history.get(name, [])
-                    history[name] = result + [ logs[name] ]
-
-                # Export best model and history
-                if self.cb['early_stop'].best_epoch == epoch:
-                    print('Saving best model so far...')
-
-                    mlflow.pytorch.log_model(
-                        self.model,
-                        # MLFlow artifact path is not local folder
-                        artifact_path = 'model',
-                        conda_env = 'conda.yaml',
-                        signature = mlflow.models.infer_signature(
-                            model_input = {
-                                'img_inputs': ds['image'].numpy(force = True),
-                                'feat_inputs': ds['features'].numpy(force = True)
-                            },
-                            model_output = preds.numpy(force = True)
-                        )
-                    )
-
-                    # Local folder for temporarily storing other file artifacts
-                    # The files will be copied to MLFlow artifact path after calling "log_artifacts"
-                    shutil.rmtree(cfg['model_dir'], ignore_errors = True)
-                    os.makedirs(cfg['model_dir'], exist_ok = True)
-
-                    torch.save(self.optimizer.state_dict(), cfg['model_dir'] + '/optimizer.pth')
-                    QSave.save(self.model_str, cfg['model_dir'] + '/model.txt')
-                    QSave.save(history, cfg['model_dir'] + '/history.json')
-                    mlflow.log_artifacts(cfg['model_dir'])
-
-                    self.fabric.barrier()
-
-                # Log things that may change on each epoch
-                mlflow.log_metrics(logs, epoch)
-
-                # Stop training if signaled by early stop
-                if self.cb['early_stop'].stop_training:
-                    print(f'Early stopping...')
-                    # Append best metrics at the end of log
-                    mlflow.log_metrics(
-                        self.cb['early_stop'].best_logs,
-                        epoch + 1
-                    )
-                    break
-
-        print(f'Stopped run {run.info.run_name} ({run.info.run_id})')
-        return run.info.run_id
-
-def run(cfg: TrainParams, tags: TrainTags, mlf: MLFlowSettings):
-    # Validate all input parameters
-    cfg = TrainParams.model_validate(cfg)
-    tags = TrainTags.model_validate(tags)
-    mlf = MLFlowSettings.model_validate(mlf)
-
-    print(f'{tags.author} is starting a new run for {mlf.exp_name}...')
-
-    # Set MLFlow to track current experiment
-    mlflow.set_tracking_uri(mlf.tracking_uri)
-    mlflow.set_experiment(mlf.exp_name)
-    mlflow.enable_system_metrics_logging()
-
-    # Set seed for reproducible experiment
-    Fabric.seed_everything(cfg.seed)
-
-    df_train, df_val = read_data(cfg)
-    train_loader = preprocess_data(df_train, cfg, is_train_data = True)
-    val_loader = preprocess_data(df_val, cfg, is_train_data = False)
+    val_loader = PawDataLoader(
+        params.csv_dir + '/val.csv',
+        img_dir = params.img_dir,
+        is_train_data = False,
+        batch_size = params.batch_size,
+        img_size = params.img_size,
+        s3_cfg = s3_cfg,
+        cache_dir = cache_dir.name
+    )
 
     model = PawModel()
-    trainer = Trainer(model, train_loader, val_loader, cfg)
-    run_id = trainer.start_training(cfg, tags, mlf.reg_model_name)
+    trainer = Trainer(model, train_loader, val_loader)
+    print(f'Preparing to train "{model.__class__.__name__}" model')
 
-    # Register model from the last run
-    mlflow.register_model(
-        f'runs:/{run_id}/model',
-        mlf.reg_model_name
-    )
+    # Don't modify the original params directly
+    params = deepcopy(params)
+    # Setup optimizer, early stop callback, and other things
+    # This will add optimizer name, etc. to the returned params
+    params = trainer.prep_training(params)
+    # Log the params and tags to MLFlow and train the model
+    # This will add the run id to the returned params
+    params = trainer.start_training(params, tags, mlf_cfg)
 
-if __name__ == '__main__':
-    # It will read parameters passed from CLI
-    args = TrainSettings()
+    # Get the best model only and delete other models from that run
+    # This will add the best model URI to the returned params
+    print('Filtering and keeping only the best model')
+    params = trainer.get_best_model(params, mlf_cfg, delete_others = True)
+    # Clean back the cache dir
+    cache_dir.cleanup()
 
-    # Only override tags if not passed from CLI
-    if not args.tags:
-        args.tags = TrainTags(
-            author = 'Andhika',
-            lib = 'PyTorch',
-            model = 'CNN',
-            ext = 'py'
+    return params
+
+
+def register_model(
+    params: TrainParams, mlf_model: MLFlowModel, mlf_cfg: MLFlowConf,
+    finished_only: bool = True
+) -> str:
+    if not (params.run_id and params.best_model_uri):
+        raise ValueError('Run id and model URI can\'t be empty')
+
+    mlf_cfg.expose_auth_to_env()
+    mlflow.set_tracking_uri(mlf_cfg.tracking_uri)
+    run = mlflow.get_run(params.run_id)
+
+    # Don't register if the run failed or stopped by the user
+    if finished_only and run.info.status != 'FINISHED':
+        raise RuntimeError(
+            f'Expected status "FINISHED" but got "{run.info.status}" on '
+            f'run id "{params.run_id}"'
         )
 
-    # Use default MLFlow settings
-    mlf = MLFlowSettings()
+    # MLFlow will print the details after this
+    print('Preparing to register the model')
 
-    run(args.params, args.tags, mlf)
+    status = mlflow.register_model(
+        params.best_model_uri,
+        mlf_model.registered_model_name
+    )
+
+    # By default, the version will be incremental number
+    # However, the returned type will always be string
+    return status.version
+
+
+def run(
+    data_source_repo: str, data_source_creds: LakeFSConf, train_params: TrainParams,
+    train_tags: TrainTags, model_registry: MLFlowModel, mlflow_creds: MLFlowConf
+):
+    # Get the last data commit id from lakeFS and add it as params
+    commit_id = get_data_commit_id(data_source_repo, data_source_creds)
+    train_params.data_commit_id = commit_id
+
+    # Set CSV and image directory based on the source repo
+    # We don't use pathlib because it will break the S3 URI
+    train_params.csv_dir = data_source_repo
+    train_params.img_dir = data_source_repo + '/images'
+    train_params.epochs = 1
+
+    train_params = model_training(
+        train_params, train_tags, data_source_creds.as_s3(), mlflow_creds
+    )
+
+    register_model(
+        train_params, model_registry, mlflow_creds, finished_only = True
+    )
+
+
+if __name__ == '__main__':
+    dotenv.load_dotenv(
+        '.env.prod' if Path('.env.prod').exists()
+        else '.env.dev'
+    )
+
+    class ParseArgs(BaseSettings):
+        """Train a model using data sourced from S3."""
+
+        model_config = SettingsConfigDict(
+            cli_parse_args = True,
+            cli_kebab_case = True,
+            validate_assignment = True
+        )
+
+        data_source_repo: str = Field(alias = 'TRAIN_DATA_SOURCE')
+        data_source_creds: LakeFSConf = Field(default_factory = LakeFSConf)
+
+        # No need for factory if it doesn't read environment variable
+        train_params: TrainParams = TrainParams()
+        train_tags: TrainTags = TrainTags()
+
+        model_registry: MLFlowModel = Field(default_factory = MLFlowModel)
+        mlflow_creds: MLFlowConf = Field(default_factory = MLFlowConf)
+
+        @field_validator('train_tags', mode = 'after')
+        @classmethod
+        def check_default_tags(cls, value: TrainTags):
+            if value == TrainTags():
+                warnings.warn(
+                    f'Using default author name ({value.author}) and other tags as '
+                    'MLFLow run tags. You may want to review/change this later'
+                )
+
+            return value
+
+    args = ParseArgs()
+
+    run(
+        args.data_source_repo, args.data_source_creds,
+        args.train_params, args.train_tags,
+        args.model_registry, args.mlflow_creds
+    )

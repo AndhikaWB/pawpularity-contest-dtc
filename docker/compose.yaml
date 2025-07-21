@@ -4,14 +4,14 @@ x-mlops-common:
   &mlops-common
   environment:
     &mlops-common-env
-    # Read by JuiceFS as S3 gateway auth
-    MINIO_ROOT_USER: ${S3_USER}
-    MINIO_ROOT_PASSWORD: ${S3_PASS}
+    # Read by JuiceFS to set the gateway auth
+    MINIO_ROOT_USER: ${_S3_USERNAME}
+    MINIO_ROOT_PASSWORD: ${_S3_PASSWORD}
     # Read by AWS CLI to create new buckets
     # Read by MLFlow to store model artifacts
-    AWS_ACCESS_KEY_ID: ${S3_USER}
-    AWS_SECRET_ACCESS_KEY: ${S3_PASS}
-    AWS_ENDPOINT_URL: ${S3_ENDPOINT}
+    AWS_ACCESS_KEY_ID: ${_S3_USERNAME}
+    AWS_SECRET_ACCESS_KEY: ${_S3_PASSWORD}
+    AWS_ENDPOINT_URL: ${_S3_ENDPOINT}
 
 services:
   juicefs:
@@ -52,22 +52,28 @@ services:
     entrypoint: ["/bin/bash", "-c"]
     command:
       - |
-        if [[ ! -z $$(aws s3api head-bucket --bucket "${MLFLOW_MODEL_BUCKET_NAME}" 2>&1) ]]; then
+        if [[ ! -z $$(aws s3api head-bucket --bucket "${_MLFLOW_MODEL_BUCKET_NAME}" 2>&1) ]]; then
           echo "Creating new bucket for storing MLFlow artifacts..."
-          aws s3 mb "s3://${MLFLOW_MODEL_BUCKET_NAME}"
+          aws s3 mb "s3://${_MLFLOW_MODEL_BUCKET_NAME}"
         fi
 
-        if [[ ! -z $$(aws s3api head-bucket --bucket "${DVC_DATA_BUCKET_NAME}" 2>&1) ]]; then
-          echo "Creating new bucket for storing DVC versioned data..."
-          aws s3 mb "s3://${DVC_DATA_BUCKET_NAME}"
+        if [[ ! -z $$(aws s3api head-bucket --bucket "${_LAKEFS_DATA_BUCKET_NAME}" 2>&1) ]]; then
+          echo "Creating new bucket for storing lakeFS repos..."
+          aws s3 mb "s3://${_LAKEFS_DATA_BUCKET_NAME}"
         fi
 
   mlflow:
-    <<: *mlops-common
     image: ghcr.io/mlflow/mlflow:latest
+    environment:
+      <<: *mlops-common-env
+      # We should actually use separate secret key, I'm just lazy
+      MLFLOW_FLASK_SERVER_SECRET_KEY: ${_POSTGRES_ADMIN_PASSWORD}
+      MLFLOW_AUTH_CONFIG_PATH: /home/mlflow/basic_auth.ini
     volumes:
       # SQLite database for MLFlow
       - ./home/mlflow:/home/mlflow
+      # Admin username and password
+      - ./init/mlflow/basic_auth.ini:/home/mlflow/basic_auth.ini
     ports:
       # MLFlow tracking server port
       - 5000:5000
@@ -79,18 +85,75 @@ services:
     entrypoint: ["/bin/bash", "-c"]
     command:
         - |
+          echo "Installing MLFlow auth addon..."
+          pip install mlflow[auth] --no-cache-dir
+
           echo "Installing Python boto3 dependency..."
-          echo "boto3 version between MLFlow server and client must be the same!"
-          pip install boto3==1.38.27 --no-cache-dir
+          pip install boto3==1.38.44 --no-cache-dir
 
           echo "Starting MLFlow UI server..."
           mlflow ui -h 0.0.0.0 -p 5000 \
+            --app-name basic-auth \
             --backend-store-uri "sqlite:///home/mlflow/mlruns.db" \
             --default-artifact-root "mlflow-artifacts:/" \
-            --artifacts-destination "s3://${MLFLOW_MODEL_BUCKET_NAME}"
+            --artifacts-destination "s3://${_MLFLOW_MODEL_BUCKET_NAME}" \
             --serve-artifacts
     healthcheck:
       test: ["CMD", "curl", "-f", "localhost:5000/health"]
+      start_period: 30s
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: ${_POSTGRES_ADMIN_USERNAME}
+      POSTGRES_PASSWORD: ${_POSTGRES_ADMIN_PASSWORD}
+    volumes:
+      # Postgres data directory
+      - ./var/lib/postgresql/data:/var/lib/postgresql/data
+      # Create new lakeFS user and database
+      - ./init/postgres/lakefs.sql:/docker-entrypoint-initdb.d/lakefs.sql
+    ports:
+      # Postgres connection port
+      - 5432:5432
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "lakefs"]
+      start_period: 30s
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  lakefs:
+    image: treeverse/lakefs:latest
+    environment:
+      LAKEFS_DATABASE_TYPE: postgres
+      LAKEFS_DATABASE_POSTGRES_CONNECTION_STRING: postgres://${_DB_LAKEFS_USERNAME}:${_DB_LAKEFS_PASSWORD}@postgres:5432/${_DB_LAKEFS_DBNAME}
+      # We should actually use separate secret key, I'm just lazy
+      LAKEFS_AUTH_ENCRYPT_SECRET_KEY: ${_DB_LAKEFS_PASSWORD}
+      # https://docs.lakefs.io/latest/reference/configuration/#blockstore
+      LAKEFS_BLOCKSTORE_TYPE: s3
+      LAKEFS_BLOCKSTORE_S3_FORCE_PATH_STYLE: "true"
+      LAKEFS_BLOCKSTORE_S3_DISCOVER_BUCKET_REGION: "false"
+      LAKEFS_BLOCKSTORE_S3_ENDPOINT: ${_S3_ENDPOINT}
+      LAKEFS_BLOCKSTORE_S3_CREDENTIALS_ACCESS_KEY_ID: ${_S3_USERNAME}
+      LAKEFS_BLOCKSTORE_S3_CREDENTIALS_SECRET_ACCESS_KEY: ${_S3_PASSWORD}
+
+    ports:
+      # lakeFS web UI port
+      - 8000:8000
+    depends_on:
+      juicefs:
+        condition: service_healthy
+      awscli:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "localhost:8000/api/v1/healthcheck"]
       start_period: 30s
       interval: 10s
       timeout: 5s
