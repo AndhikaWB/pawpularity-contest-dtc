@@ -1,68 +1,96 @@
-import torchmetrics as tm
+# Bypass line length limit
+# ruff: noqa: E501
+
+from argparse import SUPPRESS
 from typing import Annotated
-from pydantic import BaseModel, ConfigDict, Field
-from pydantic_settings import BaseSettings, SettingsConfigDict, CLI_SUPPRESS
+
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class MLFlowModel(BaseSettings):
-    """Used when registering or testing an MLFlow model.
+    """Used when registering, testing, or promoting an MLFlow model.
 
     Args:
-        registered_model_name (str): Name to check or register the model. Each time we
-            register a model under this name, it will be added as a new model version.
-        best_version_alias (str, optional): Alias to set for the best model version
-            after comparing the metric. Defaults to 'best'.
-        compare_metric (str): Metric class name that will be used to compare different
-            model versions. It checks the class name from the `torchmetrics` library.
-        compare_metric_min (bool): Whether min or max value is better for the metric.
-            Defaults to True (min is better).
+        model_registry_name (str): Name to use when loading or registering a model. Each
+            time we register a model under this name, it will be added as a new model
+            version.
+        best_version_alias (str, optional): Alias to set for the best model version,
+            e.g. after doing an evaluation and comparing the metric. Defaults to 'best'.
     """
 
-    model_config = SettingsConfigDict(extra = 'allow', validate_by_name = True)
+    model_config = SettingsConfigDict(validate_by_name = True)
 
-    registered_model_name: Annotated[str, Field(validation_alias = 'TEST_REGISTERED_MODEL_NAME')]
-    best_version_alias: Annotated[str, Field(validation_alias = 'TEST_BEST_VERSION_ALIAS')] = 'best'
-
-    # Not neccesarily the same metric as the one used for training
-    compare_metric: Annotated[str, Field(validation_alias = 'TEST_COMPARE_METRIC')]
-    compare_metric_min: Annotated[bool, Field(validation_alias = 'TEST_COMPARE_METRIC_MIN')] = True
-
-    def get_metric_class(self):
-        pass
+    # TODO: Make it so we can switch environment/promote model easily
+    model_registry_name: Annotated[str, Field(validation_alias = 'DEV_MODEL_REGISTRY_NAME')]
+    best_version_alias: Annotated[str, Field(validation_alias = 'DEV_BEST_VERSION_ALIAS')] = 'best'
 
 
-class TrainParams(BaseModel):
-    """Parameters that will be used or logged to MLFlow when training, but can be used
-    outside the training context too (e.g. for testing).
+class TestParams(BaseSettings):
+    model_config = SettingsConfigDict(validate_by_name = True)
+
+    # Use this solely for testing purpose only, not for training
+    metric: Annotated[str, Field(validation_alias = 'TEST_METRIC')]
+    metric_min: Annotated[bool, Field(validation_alias = 'TEST_METRIC_MIN')] = True
+    metric_threshold: Annotated[float, Field(validation_alias = 'TEST_METRIC_THRESHOLD')]
+
+    # To filter from other types of run
+    context: Annotated[str, Field(description = SUPPRESS)] = 'testing'
+
+    # Will be set after getting the repo data from lakeFS
+    data_commit_id: Annotated[str, Field(description = SUPPRESS)] = None
+    csv_dir: Annotated[str, Field(description = SUPPRESS)] = None
+    img_dir: Annotated[str, Field(description = SUPPRESS)] = None
+
+    # Just to configure the data loader
+    img_size: Annotated[tuple[int, int], Field(validation_alias = 'TRAIN_IMG_SIZE')] = (128, 128)
+    batch_size: Annotated[int, Field(ge = 1, validation_alias = 'TRAIN_BATCH_SIZE')] = 64
+
+
+class TrainParams(BaseSettings):
+    """Parameters that will be used to configure the training process, and logged to
+    MLFlow when starting the training run.
     """
 
-    model_config = ConfigDict(extra = 'allow')
+    model_config = SettingsConfigDict(validate_by_name = True)
 
-    # User inputs
-    img_size: tuple[int, int] = (128, 128)
-    seed: int = 1337
-    lr: Annotated[float, Field(ge = 0.00)] = 0.001
-    batch_size: Annotated[int, Field(ge = 1)] = 64
-    epochs: Annotated[int, Field(ge = 1)] = 20
-    patience: Annotated[int, Field(ge = 1)] = 5
+    # User inputs, configurable via CLI arguments or environment variables
+    img_size: Annotated[tuple[int, int], Field(validation_alias = 'TRAIN_IMG_SIZE')] = (128, 128)
+    seed: Annotated[int, Field(validation_alias = 'TRAIN_SEED')] = 1337
+    lr: Annotated[float, Field(ge = 0.00, validation_alias = 'TRAIN_LR')] = 0.001
+    batch_size: Annotated[int, Field(ge = 1, validation_alias = 'TRAIN_BATCH_SIZE')] = 64
+    epochs: Annotated[int, Field(ge = 1, validation_alias = 'TRAIN_EPOCH')] = 20
+    patience: Annotated[int, Field(ge = 1, validation_alias = 'TRAIN_PATIENCE')] = 5
 
-    # Will be set after getting repo data from lakeFS
-    data_commit_id: Annotated[str, Field(description = CLI_SUPPRESS)] = None
-    csv_dir: Annotated[str, Field(description = CLI_SUPPRESS)] = None
-    img_dir: Annotated[str, Field(description = CLI_SUPPRESS)] = None
+    # To filter from other types of run
+    context: Annotated[str, Field(description = SUPPRESS)] = 'training'
 
-    # Will be set when preparing training
-    optimizer: Annotated[str, Field(description = CLI_SUPPRESS)] = None
-    criterion: Annotated[str, Field(description = CLI_SUPPRESS)] = None
-    monitor: Annotated[str, Field(description = CLI_SUPPRESS)] = None
-    monitor_min: Annotated[bool, Field(description = CLI_SUPPRESS)] = True
+    # Will be set after getting the repo data from lakeFS
+    data_commit_id: Annotated[str, Field(description = SUPPRESS)] = None
+    csv_dir: Annotated[str, Field(description = SUPPRESS)] = None
+    img_dir: Annotated[str, Field(description = SUPPRESS)] = None
 
-    # Will be set after training
-    run_id: Annotated[str, Field(description = CLI_SUPPRESS)] = None
-    best_model_uri: Annotated[str, Field(description = CLI_SUPPRESS)] = None
+    # Will be set when preparing for training
+    optimizer: Annotated[str, Field(description = SUPPRESS)] = None
+    criterion: Annotated[str, Field(description = SUPPRESS)] = None
+    monitor: Annotated[str, Field(description = SUPPRESS)] = None
+    monitor_min: Annotated[bool, Field(description = SUPPRESS)] = True
+
+    def to_test(self) -> TestParams:
+        """Try initializing the `TestParams` based on this instance data. Other required
+        parameters must be provided via environment variables.
+        """
+
+        return TestParams(
+            data_commit_id = self.data_commit_id,
+            csv_dir = self.csv_dir,
+            img_dir = self.img_dir,
+            img_size = self.img_size,
+            batch_size = self.batch_size
+        )
 
 
-class TrainTags(BaseModel):
+class TrainTags(BaseSettings):
     """Tags to log to MLFlow when starting a run/training. Note that these run tags are
     not the same as model tags. You can/must set separate tags for the model later.
 
@@ -71,16 +99,39 @@ class TrainTags(BaseModel):
         framework (str, optional): Main framework of the ML model (e.g. TensorFlow,
             PyTorch). Defaults to 'PyTorch'.
         model (str, optional): Model type/variant (e.g. XGBoost, CNN). You can use
-            anything but models with the same type/variant should always have matching
-            tag. Defaults to 'Simple CNN'.
-        extension (str, optional): File extension to help differentiate development
-            stage. `ipynb` is used for early prototype while `py` is more production
-            ready. Defaults to 'py'.
+            anything but models with the same type/variant should ideally have a
+            matching tag. Defaults to 'Simple CNN'.
+        extension (str, optional): File extension to help differentiate early
+            development stage. `ipynb` is used for prototype while `py` is more
+            production ready. Defaults to 'py'.
     """
 
-    model_config = ConfigDict(extra = 'allow')
+    model_config = SettingsConfigDict(validate_by_name = True)
 
-    author: Annotated[str, Field(description = 'Author')] = 'Bot'
-    framework: Annotated[str, Field(description = 'Framework')] = 'PyTorch'
-    model: Annotated[str, Field(description = 'Model type/variant')] = 'Simple CNN'
-    extension: Annotated[str, Field(description = 'File extension')] = 'py'
+    author: Annotated[str, Field(validation_alias = 'TRAIN_TAG_AUTHOR')] = 'Bot'
+    framework: Annotated[str, Field(validation_alias = 'TRAIN_TAG_FRAMEWORK')] = 'PyTorch'
+    model: Annotated[str, Field(description = 'TRAIN_TAG_MODEL')] = 'Simple CNN'
+    extension: Annotated[str, Field(validation_alias = 'TRAIN_TAG_EXTENSION')] = 'py'
+
+
+class TrainResult(BaseModel):
+    run_id: str
+    data_commit_id: str
+    model_uri: str
+
+    metric: str
+    metric_min: bool
+    score: float
+
+
+class TestResult(BaseModel):
+    run_id: str
+    data_commit_id: str
+    model_uri: str
+
+    model_version: str
+    model_registry_name: str
+
+    metric: str
+    metric_min: bool
+    score: float

@@ -6,5 +6,5 @@ indent-style = "space"
 
 [lint]
 # Line length warning, use pathlib when possible
-extend-select = ["E501", "W505", "PTH"]
-extend-ignore = ["PTH123"]
+select = ["E501", "W505", "PTH"]
+ignore = ["PTH123"]

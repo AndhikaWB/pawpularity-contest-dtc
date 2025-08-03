@@ -118,7 +118,7 @@ class LossMetric(tm.Metric):
 
 
 class QSave:
-    """Quickly save or load plain text or JSON file."""
+    """Quickly save/load plain text or JSON file from local file system."""
 
     @staticmethod
     def save(obj: dict | str, path: str) -> None:
@@ -135,3 +135,31 @@ class QSave:
                 return json.load(f)
             else:
                 return f.read()
+
+
+class MetricTester:
+    """Easily compare a metric value with other value or a threshold."""
+
+    def __init__(self, threshold: float, min_is_better: bool = True):
+        self.threshold = threshold
+        self.min_is_better = min_is_better
+    
+    def better_than(self, a: float, b: float):
+        """Returns True if value "a" is better than or equal to value "b"."""
+
+        # Why the equal operator? Because we shouldn't change the model unnecessarily
+        # If the old model is still equal to the new model, just use the old model
+        if self.min_is_better:
+            return a <= b
+        else:
+            return a >= b
+
+    def is_safe(self, value: float):
+        """Returns True if the value is still considered normal/safe compared to the
+        threshold.
+        """
+
+        if self.min_is_better:
+            return value < self.threshold
+        else:
+            return value > self.threshold

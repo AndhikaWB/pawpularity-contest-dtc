@@ -9,22 +9,20 @@ from concurrent import futures
 import dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from _pydantic.shared import S3Conf, LakeFSConf, ValidOrNone
+from _pydantic.common import S3Conf, LakeFSConf, ValidOrNone
 
 import boto3
-import lakefs
-from _s3.utils import (
-    download_dir, get_bucket_key, upload_dir, get_repo_branch
-)
+from _s3.lakefs import get_repo_branch, commit_branch
+from _s3.common import download_dir, get_bucket_key, upload_dir
 
 
 def pull_data(remote_dir: str, local_dir: str, s3_cfg: S3Conf | None = None) -> str:
-    # If not S3 URI, assume the data is already pulled
+    # If not an S3 URI, assume it's a local path
     if not remote_dir.startswith('s3://'):
         print(f'Using data from "{local_dir}"')
         return local_dir
     elif not s3_cfg:
-        raise ValueError('S3 credentials must be supplied if using S3')
+        raise ValueError('S3 credentials can\'t be empty if using S3')
 
     print(f'Pulling data from "{remote_dir}" to "{local_dir}"')
     download_dir(remote_dir, local_dir, s3_cfg, replace = True)
@@ -98,16 +96,18 @@ def upload_data(local_dir: str, remote_dir: str, s3_cfg: S3Conf):
 
 
 def commit_data(repo_id: str, branch: str, lfs_cfg: LakeFSConf) -> str:
-    client = lakefs.Client(**dict(lfs_cfg))
-    repo = lakefs.Repository(repo_id, client = client)
-
     print(f'Commiting changes to "{repo_id}/{branch}"')
-    commit = repo.branch(branch).commit(
-        message = f'Auto-commit at {datetime.now()}'
+    commit_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    commit_id = commit_branch(
+        repo_id,
+        branch = branch,
+        message = f'Auto-commit at {commit_time}',
+        lfs_cfg = lfs_cfg
     )
 
-    print(f'Saved changes as commit id "{commit.id}"')
-    return commit.id
+    print(f'Saved changes as commit id "{commit_id}"')
+    return commit_id
 
 
 def run(
@@ -125,6 +125,8 @@ def run(
     # Save the changes by commiting it
     repo_id, branch = get_repo_branch(target_dir)
     commit_data(repo_id, branch, target_creds)
+
+    return target_dir
 
 
 if __name__ == '__main__':
@@ -148,7 +150,7 @@ if __name__ == '__main__':
         target_creds: LakeFSConf = Field(default_factory = LakeFSConf)
 
         # We can simulate streaming/monthly data by using random seed
-        # Though this means that the data may not be truly unique
+        # However, complete uniqueness can't guaranteed from each seed
         seed: int = Field(default_factory = lambda: randint(1, 9999))
 
     args = ParseArgs()

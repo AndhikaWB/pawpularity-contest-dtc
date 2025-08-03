@@ -10,11 +10,9 @@ from torchvision.io import decode_image
 from torchvision.transforms import v2
 from torchvision.transforms.functional import pil_to_tensor
 
-from mlflow.types import Schema, ColSpec, DataType
-
 import boto3
-from _s3.utils import get_bucket_key
-from _pydantic.shared import S3Conf
+from _pydantic.common import S3Conf
+from _s3.common import get_bucket_key
 
 
 class PawDataset(Dataset):
@@ -31,25 +29,6 @@ class PawDataset(Dataset):
         self.img_transform = img_transform
         self.transform = transform
 
-        if s3_cfg:
-            self.s3_config(s3_cfg, cache_dir)
-
-    def s3_config(self, s3_cfg: S3Conf, cache_dir: str | None = None):
-        """Configure things to fetch image data from S3.
-
-        Args:
-            s3_cfg (S3Conf): S3 credentials for downloading images from `img_dir`.
-            cache_dir (str | None, optional): Cache directory for storing downloaded
-                images. Defaults to None (no cache).
-
-        Raises:
-            RuntimeError: Raised if the S3 source has already been set up.
-        """
-
-        if hasattr(self, 'bucket'):
-            # Since it modifies the image dir, we can't call it multiple times
-            raise RuntimeError('s3_config should only be called once')
-
         if s3_cfg and self.img_dir.startswith('s3://'):
             # Extract the bucket and key from the full S3 path
             bucket, img_dir = get_bucket_key(self.img_dir)
@@ -58,33 +37,8 @@ class PawDataset(Dataset):
             self.bucket = s3.Bucket(bucket)
             # Image dir now becomes path after the bucket
             self.img_dir = img_dir
-            # Cache dir for saving local download
+            # Cache dir for storing downloaded files
             self.cache_dir = cache_dir
-
-    def schema(self) -> Schema:
-        """Schema for MLFlow `MetaDataset`. You can pass the `MetaDataset` to MLFlow
-        `log_input` or `log_metric` function later. To access this schema from PyTorch
-        `DataLoader`, you can call `<loader_name>.dataset.schema()`.
-        """
-
-        col_specs = []
-
-        for i in range(len(self.df.columns)):
-            # Convert Polars data type to Python
-            dtype = self.df.dtypes[i].to_python()
-            # Then from Python to MLFlow data type
-            # Not all data types are supported
-            for val in DataType:
-                if val.to_python() == dtype:
-                    dtype = val
-
-            col_specs.append(
-                ColSpec(type = dtype, name = self.df.columns[i])
-            )
-
-        # Note that data type error won't be raised immediately
-        # It will only happen later when you call MetaDataset
-        return Schema(col_specs)
 
     def __len__(self):
         return self.df.shape[0]
@@ -171,7 +125,7 @@ class PawDataLoader:
     """
 
     def __new__(
-        cls, csv_path: str, img_dir: str, is_train_data: bool,
+        cls, csv_path: str | pl.DataFrame, img_dir: str, is_train_data: bool,
         batch_size: int = 64, img_size: tuple[int, int] = (128, 128),
         s3_cfg: S3Conf | None = None, cache_dir: str | None = None
     ) -> DataLoader:
@@ -183,9 +137,9 @@ class PawDataLoader:
         cls.s3_cfg = s3_cfg
         cls.cache_dir = cache_dir
 
-        # This is just the DataLoader with preconfigured preprocessings
+        # This is just the DataLoader with preconfigured preprocessing
         # There's no need to inherit the DataLoader class directly
-        # We can make use of the __new__ function instead of __init__
+        # So we use __new__ instead of the __init__ function
         return cls.__get_dataloader()
 
     @classmethod
@@ -218,6 +172,10 @@ class PawDataLoader:
 
     @classmethod
     def __get_dataframe(cls) -> pl.DataFrame:
+        # If already a dataframe, no need to do anything
+        if type(cls.csv_path) == pl.DataFrame:
+            return cls.csv_path
+
         # Source the CSV file from S3 when provided
         s3_cfg = dict(cls.s3_cfg) if cls.s3_cfg else None
         return pl.scan_csv(cls.csv_path, storage_options = s3_cfg).collect()

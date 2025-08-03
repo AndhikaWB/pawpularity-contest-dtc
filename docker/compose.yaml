@@ -68,12 +68,12 @@ services:
       <<: *mlops-common-env
       # We should actually use separate secret key, I'm just lazy
       MLFLOW_FLASK_SERVER_SECRET_KEY: ${_POSTGRES_ADMIN_PASSWORD}
-      MLFLOW_AUTH_CONFIG_PATH: /home/mlflow/basic_auth.ini
+      MLFLOW_AUTH_CONFIG_PATH: /var/lib/mlflow/basic_auth.ini
     volumes:
       # SQLite database for MLFlow
       - ./home/mlflow:/home/mlflow
-      # Admin username and password
-      - ./init/mlflow/basic_auth.ini:/home/mlflow/basic_auth.ini
+      # Admin credentials, don't use the home path to avoid duplicate
+      - ./init/mlflow/basic_auth.ini:/var/lib/mlflow/basic_auth.ini
     ports:
       # MLFlow tracking server port
       - 5000:5000

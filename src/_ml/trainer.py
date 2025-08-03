@@ -1,7 +1,9 @@
 import tempfile
+import polars as pl
 
 import mlflow
 from mlflow.data.meta_dataset import MetaDataset
+from mlflow.types import Schema, ColSpec, DataType
 from mlflow.data.http_dataset_source import HTTPDatasetSource
 
 import torch
@@ -10,9 +12,9 @@ from torch.utils.data import DataLoader
 from lightning import Fabric
 import torchmetrics as tm
 
+from _pydantic.common import MLFlowConf
 from _ml.utils import LossMetric, EarlyStopping, QSave
-from _pydantic.train_test import TrainParams, TrainTags
-from _pydantic.shared import MLFlowConf
+from _pydantic.train_test import TrainParams, TrainTags, TrainResult
 
 
 class Trainer:
@@ -49,11 +51,11 @@ class Trainer:
         params.monitor = 'val_bce'
         params.monitor_min = True
 
-        print('MLFlow parameters:', params.model_dump(exclude_none = True))
+        print('MLFlow parameters:', dict(params))
 
         # ----------
 
-        # Initiate Fabric with the GPU accelerator
+        # Initiate Lightning Fabric with GPU accelerator
         # Without this, we have to call "to_device" everywhere
         self.fabric = Fabric(accelerator = 'gpu')
 
@@ -70,12 +72,44 @@ class Trainer:
         # You can reuse this later or just discard it
         return params
 
+    def get_input_metadata(self, params: TrainParams):
+        if not (params.csv_dir or params.data_commit_id):
+            raise ValueError('Data source or commit id can\'t be empty')
+
+        # Try to get the underlaying dataframe from the data loader
+        df = getattr(self.train_loader.dataset, 'df', None)
+        column_schemas = None
+
+        if df and type(df) == pl.DataFrame:
+            column_specs = []
+
+            for i in range(len(df.columns)):
+                # Convert Polars data type to Python
+                dtype = df.dtypes[i].to_python()
+                # Then convert again from Python to MLFlow data type
+                # Note that not all data types are supported by MLFlow
+                for val in DataType:
+                    if val.to_python() == dtype:
+                        dtype = val
+
+                column_specs.append(
+                    ColSpec(type = dtype, name = df.columns[i])
+                )
+
+            column_schemas = Schema(column_specs)
+
+        return MetaDataset(
+            HTTPDatasetSource(params.csv_dir),
+            name = 'lakeFS',
+            # If too long, an error will be raised
+            digest = params.data_commit_id[:8],
+            # If unsupported, an error will be raised
+            schema = column_schemas
+        )
+
     def start_training(
         self, params: TrainParams, tags: TrainTags, mlf_cfg: MLFlowConf
-    ) -> TrainParams:
-        if not (params.csv_dir and params.data_commit_id):
-            raise ValueError('Data source and commit id can\'t be empty')
-
+    ) -> str:
         mlf_cfg.expose_auth_to_env()
         mlflow.set_tracking_uri(mlf_cfg.tracking_uri)
         mlflow.set_experiment(mlf_cfg.experiment_name)
@@ -88,17 +122,12 @@ class Trainer:
 
             # We may not always have access to the run params later
             # But we can tie the dataset info to the model directly
-            metadata = MetaDataset(
-                HTTPDatasetSource(params.csv_dir),
-                name = 'lakeFS',
-                digest = params.data_commit_id[:8],
-                schema = self.train_loader.dataset.schema()
-            )
+            metadata = self.get_input_metadata(params)
 
             # Log things that won't change
-            mlflow.set_tags(tags.model_dump(exclude_none = True))
-            mlflow.log_params(params.model_dump(exclude_none = True))
-            mlflow.log_input(metadata, context = 'training')
+            mlflow.set_tags(dict(tags))
+            mlflow.log_params(dict(params))
+            mlflow.log_input(metadata, context = params.context)
             print(f'Started run {run.info.run_name} ({run.info.run_id})')
 
             # Reset early stop state
@@ -200,7 +229,7 @@ class Trainer:
                         logs, epoch, model_id = model_info.model_id, dataset = metadata
                     )
                 else:
-                    # If not the best epoch, don't attach metrics to a model
+                    # If not the best epoch, don't attach metrics to the model
                     mlflow.log_metrics(logs, epoch, dataset = metadata)
 
                 self.fabric.barrier()
@@ -213,14 +242,13 @@ class Trainer:
                     mlflow.log_metrics(self.cb['early_stop'].best_logs, epoch + 1)
                     break
 
-        params.run_id = run.info.run_id
-        return params
+        return run.info.run_id
 
     def get_best_model(
-        self, params: TrainParams, mlf_cfg: MLFlowConf, delete_others: bool
-    ) -> TrainParams:
-        if not (params.run_id and params.monitor):
-            raise ValueError('Run id and metric to compare can\'t be empty')
+        self, run_id: str, params: TrainParams, mlf_cfg: MLFlowConf, delete_others: bool
+    ) -> TrainResult:
+        if not (run_id or params.monitor):
+            raise ValueError('Run id or metric to compare can\'t be empty')
 
         mlf_cfg.expose_auth_to_env()
         mlflow.set_tracking_uri(mlf_cfg.tracking_uri)
@@ -229,10 +257,12 @@ class Trainer:
         experiment_id = client.get_experiment_by_name(mlf_cfg.experiment_name)
         experiment_id = experiment_id.experiment_id
 
-        # Sort models from the last run by the metric score
+        # Sort models from the last run by a specific metric score
+        # In our case, each model can only be tied with one epoch only
+        # In other words, each epoch has a unique model and metrics
         logged_models = client.search_logged_models(
             experiment_ids = [ experiment_id ],
-            filter_string = f'source_run_id = \'{params.run_id}\'',
+            filter_string = f'source_run_id = \'{run_id}\'',
             order_by = [
                 dict(
                     field_name = f'metrics.{params.monitor}',
@@ -241,10 +271,27 @@ class Trainer:
             ]
         )
 
+        if not logged_models:
+            raise RuntimeError(f'No model is found under run id "{run_id}"')
+
         # Delete every models except the best model
         if delete_others:
             for i in logged_models[1:]:
                 client.delete_logged_model(i.model_id)
 
-        params.best_model_uri = logged_models[0].model_uri
-        return params
+        # Get the best model URI from this run
+        best_model_uri = logged_models[0].model_uri
+        # Also get the specific metric score tied to that model
+        # TODO: Check behavior if the model is tied with more than 1 epoch
+        for metric in reversed(logged_models[0].metrics):
+            if metric.key == params.monitor:
+                metric_value = metric.value
+
+        return TrainResult(
+            run_id = run_id,
+            data_commit_id = params.data_commit_id,
+            model_uri = best_model_uri,
+            metric = params.monitor,
+            metric_min = params.monitor_min,
+            score = metric_value
+        )

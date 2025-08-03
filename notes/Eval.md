@@ -20,7 +20,7 @@ gxe.ExpectColumnQuantileValuesToBeBetween(
 )
 ```
 
-This seems pretty limiting to me. It expected me to know my data range in advance. I don't care about that, I just want to know whether my data changed significantly or not, and send me an alert or re-train the model if needed. Besides, I can write that kind of checks by myself if I want to, no need to rely on GX.
+This seems pretty limiting to me. It expected me to know my data range in advance. I don't care about that, I just want to know whether my data changed significantly or not, and send me an alert if needed. Besides, I can write that kind of checks by myself if I want to, no need to rely on GX.
 
 However, the plus point is that they have other aspect of monitoring that may be important for some people:
 - Freshness (e.g. data must not be older than a certain date)
@@ -28,11 +28,11 @@ However, the plus point is that they have other aspect of monitoring that may be
 - Missingness (e.g. proportion of non-null values must be above 90%)
 - And so on
 
-What I want currently is more on the model metrics side though (the others can be guaranteed). GX doesn't seem to have what I want.
+What I want currently is more on the model metrics side though (the others can pretty much be guaranteed), and GX doesn't seem to have what I want.
 
 ## Soda (soda.io)
 
-You can use their dashboard to configure what kind of monitoring you want. The config will be saved as YAML, which you can also create directly without using their dashboard. It sounds good for non-tech person (no code is required), but probably not for me since my goal is to integrate it with my code.
+You can use their dashboard to configure what kind of monitoring you want. The config will be saved as YAML, which you can also create directly without using their dashboard. It sounds good for non-tech person (no code is required), but probably not for me since my goal is to integrate it with my code directly.
 
 YAML example:
 
@@ -75,9 +75,9 @@ columns:
 
 Also, the things that you can monitor seems pretty similar as Great Expectations (e.g. min-max value, data freshness). It's probably not designed for machine learning purpose, I don't see ML mentioned anywhere on their homepage (same as Great Expectations).
 
-**EDIT:** Turns out they some basic metrics like MAPE, RMSE, etc. and time series based check too (e.g. seasonality), but still feels pretty limited and not convincing enough for me. Further more, [that page](https://docs.soda.io/sodacl-reference/anomaly-detection) mentioned they're deprecating it in favor of something else, and they just bought NannyML recently.
+**EDIT:** Turns out they some basic metrics like MAPE, RMSE, etc. and time series based check too (e.g. seasonality), but still feels pretty limited and not convincing enough for me. Further more, [that page](https://docs.soda.io/sodacl-reference/anomaly-detection) mentioned they're deprecating it and they just bought NannyML recently, so I guess they will switch to that eventually.
 
-## Whylogs (by WhyLabs)
+## Whylogs (and WhyLabs)
 
 From what I've understood, whylogs is the metrics calculator/comparer, and WhyLabs is the dashboard used to show those metrics more conveniently. You can use whylogs without WhyLabs.
 
@@ -98,17 +98,17 @@ visualization.set_profiles(target_profile_view=prof_view, reference_profile_view
 visualization.summary_drift_report()
 ```
 
-That code will show you embedded HTML which shows the data distribution (histogram), drift level, and other info for each column on the dataframe. However, I can't find anything about what kind of methods or metrics they used, so I guess you need to calculate them yourself.
+That code will show you an embedded HTML which shows the data distribution (histogram), drift level, and other info for each column on the dataframe. However, I can't find anything about what kind of methods or metrics they used, so I guess you need to calculate them yourself.
 
-I also need to see if they support image data too, and... they support it, but the code example only shows up to this point (`log_image`, but what I want to know is `summary_drift_report`):
+I also need to see if they support image data too, and they support it, but the code example only shows up to this point (`log_image`, but what I want to know is `summary_drift_report`):
 
 ```
 {'image/Brightness.stddev:types/boolean': 0, 'image/Brightness.stddev:types/string': 0, 'image/Brightness.stddev:types/object': 0, 'image/Brightness.stddev:cardinality/est': 1.0, 'image/Brightness.stddev:cardinality/upper_1': 1.000049929250618, 'image/Brightness.stddev:cardinality/lower_1': 1.0, 'image/Brightness.stddev:distribution/mean': 25.719757982712743, 'image/Brightness.stddev:distribution/stddev': 0.0, 'image/Brightness.stddev:distribution/n': 1, 'image/Brightness.stddev:distribution/max': 25.719757982712743, 'image/Brightness.stddev:distribution/min': 25.719757982712743, 'image/Brightness.stddev:distribution/q_01': 25.719757982712743, 'image/Brightness.stddev:distribution/q_05': 25.719757982712743, 'image/Brightness.stddev:distribution/q_10': 25.719757982712743, 'image/Brightness.stddev:distribution/q_25': 25.719757982712743, 'image/Brightness.stddev:distribution/median': 25.719757982712743, 'image/Brightness.stddev:distribution/q_75': 25.719757982712743, 'image/Brightness.stddev:distribution/q_90': 25.719757982712743, 'image/Brightness.stddev:distribution/q_95': 25.719757982712743, 'image/Brightness.stddev:distribution/q_99': 25.719757982712743}
 ```
 
-Sure it shows a verbose info, but I want a summary of what is actually happening. So what if their brightness is at X level? I just want to know if all these changes are significant or not. I can't find more examples involving image data from their main GitHub page, so I guess my search ends here.
+Sure it shows a verbose info, but I want a summary of what is actually happening, so what if their brightness is at X level? I just want to know if all these changes are significant or not. I can't find more examples involving image data from their main GitHub page, so I guess my search ends here.
 
-Setting that aside, their dashboard (WhyLabs) looks pretty nice though, I would say even better than Evidently, and probably has the features that I want (e.g. drift comparison). I don't plan to use their dashboard, but it may be a consideration for some people.
+Setting that aside, their dashboard (WhyLabs) design looks pretty nice though, I would say even better than Evidently, and probably has the features that I want (e.g. drift comparison). I don't plan to use their dashboard, but it may be a consideration for some people.
 
 The good:
 - Pretty simple, but may be too barebone for some people
@@ -117,7 +117,7 @@ The good:
 The bad:
 - The documentation is very basic
 - Last commit (the main branch) is 6 months ago
-- They auto-close stale issue after 2 weeks. That's a big red flag for me, some of the closed issues are good issue that's just ignored
+- They auto-close stale issue after 2 weeks. That's a big red flag for me, some of the closed issues are a good issue that's just ignored
 
 ## NannyML
 
@@ -153,11 +153,11 @@ Here's the bad news though:
   figure = estimated_performance.plot()
   figure.show()
   ```
-- I just learned that it has been recently acquired by Soda (yes, the same Soda that I reviewed earlier), so their future is a bit unclear. Besides, I'm not a fan of the UI first approach that Soda uses
+- I just learned that it has been recently acquired by Soda (yes, the same Soda that I reviewed earlier), so their future is a bit unclear. Besides, I'm not a fan of the UI first approach that Soda currently uses
 
 ## Alibi Detect (by Seldon)
 
-The homepage is clearly written by sales people because I can't find the docs anywhere. Also, by looking at their homepage, it makes me think that Alibi is tightly integrated with other Seldon products. However, after looking a bit more, I think Alibi can still be used as a standalone tool.
+The homepage is clearly written by sales people because I can't find the docs anywhere. Also, by looking at their homepage, it makes me think that Alibi is tightly integrated with other Seldon products. However, after looking a bit more, it seems that Alibi can still be used as a standalone tool.
 
 I had to visit their GitHub, clicking one of the function documentation, and backtrack from there to get the [main docs page](https://docs.seldon.io/projects/alibi-detect/en/stable/) (their [GitHub read me](https://github.com/SeldonIO/alibi-detect) is good for starter too). My impression is that it's a slightly more advanced than NannyML. They list which detection method they supported (e.g. VAE, isolation forest) and you're expected to know which one you want to use.
 
@@ -169,7 +169,7 @@ preds = cd.predict(x)
 
 What's good:
 - Kubernetes native. I see Kubernetes mentioned multiple times here and there
-- The supported methods and metrics are quite broad, and support image and text too. You can see this on their GitHub read me
+- The supported methods and metrics are quite broad, and support image and text too. You can see this on their GitHub read me table
 - Reference to research journals that their methods are based on. They provide code example for each case too
 
 What's neutral:
@@ -182,25 +182,31 @@ The bad:
 
 ## Evidently AI
 
-It's already been covered by Zoomcamp, so I purposely looked at Evidently last.
+It's already been covered by Zoomcamp, so I purposely looked on Evidently last.
 
-The docs structures are not the best (but still better than some others). Firstly, they don't summarizes their components in a single page (e.g. project, report, dashboard), so you need to read multiple pages to see the relationships.
+The docs structures are not the best (but still better than some others). Firstly, they don't summarizes their components in a single page (e.g. project, report, dashboard), so you need to read multiple pages to see the relationships. After reading, turns out project and dashboard are actually optional.
 
-They also use [presets](https://docs.evidentlyai.com/metrics/all_presets) by default (with pre-configure metrics, etc.) so I have to find it what each preset does behind the scene. Another slightly annoying thing is that I had to search through multiple pages to find what methods they supported. Turns out it's under [customize data drift](https://docs.evidentlyai.com/metrics/customize_data_drift), separated from common metrics like accuracy, MSE, etc. which are accessible [here](https://docs.evidentlyai.com/metrics/all_metrics).
+They promote [presets](https://docs.evidentlyai.com/metrics/all_presets), by default (with pre-configure metrics, etc.) so I have to find it what each preset does behind the scene. Another slightly annoying thing is that I had to search through multiple pages to find what methods they supported. Turns out it's under [customize data drift](https://docs.evidentlyai.com/metrics/customize_data_drift), separated from common metrics like accuracy, MSE, etc. which are accessible [here](https://docs.evidentlyai.com/metrics/all_metrics).
 
-After reading their docs a bit further, I can conclude they don't support image drift yet, but they support embedding drift (as dataframe) so I have to rework my model to use embedding if I want to use it. However, the plus side is they support LLM.
+I decided to test Evidently directly and my opinions are written below. They might sound be a bit harsh, but that's only because I get to test many things directly. Also, the bad things here doesn't necessarily mean the other tools are better.
 
 The good:
-- Easy to use and the presets are nice to use in most cases
-- The supported metrics and methods are broad enough, but I think not as broad as Alibi Detect (which has a nice checkbox on what kind of media are supported)
+- Easy to use, and the presets make things simpler especially if you use their dashboard
+- The supported metrics and methods are broad enough, but I think not as broad as Alibi Detect (which has nice checkboxes on what kind of media are supported)
+- Supports LLM, though I haven't tested it myself
 
 The bad:
 - Docs may be a bit confusing at first, but I guess not that bad
-- No image support for now, which is weird because they supported LLM already
+- No direct image support for now, but we can use embedding drift as workaround. Embedding must be imported as dataframe
+- Only Pandas dataframe is supported as the input. I get it that our test data are usually not that big, but this is still ridiculous to me
+- The result dict doesn't have a standard structure/type hint. Different metrics may use different path and the data types are mixed between Numpy and pure Python. This is a nightmare if you want to upload the result to your own database (e.g. to show to Grafana later)
+- In theory, presets are nice, but combined with the previous issue it becomes unreliable since you can't guarantee the structure. In the end, you may want to state the metrics manually to get guaranteed structure
+
+The last 2 points are especially bad for me, and this is the result after their recent major API changes (v0.7.11). I guess it may be even worse than this previously.
 
 # Winner
 
-- Technicality: Alibi Detect (very detailed), NannyML (more basic/general)
-- Easyness (subjective): Evidently. NannyML and whylogs also look simple enough, but may not be as feature complete as Evidently
+- Technicality: Alibi Detect (very detailed), NannyML (more casual/general)
+- Easyness (subjective): Evidently, but only if you want to use their dashboard. Otherwise, I still prefer NannyML
 
-That's it I guess. There are actually more in this field (e.g. DeepEval), but they all support LLM/gen AI only so I'm too lazy to check them.
+That's it I guess. There are actually more in this field (e.g. DeepEval), but they all support LLM/generative AI only so I'm too lazy to check them for now.
