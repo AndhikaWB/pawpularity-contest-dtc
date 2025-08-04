@@ -16,8 +16,9 @@ The original dataframe is already included in this repo though, and has been ren
 
 |Name|Description|
 |-|-|
-|JuiceFS|The default S3 object storage server (localhost), can be switched to MinIO or Amazon if you want. I use `boto3` in the code, so any server will work|
+|JuiceFS|The default S3 object storage server (localhost) for storing the preprocessed data, can be switched to MinIO or Amazon if you want. I use `boto3` in the code, so any server will work|
 |lakeFS|Data versioning on S3, more flexible than DVC. My data is not time series based so I use commit id as the unique identifier|
+|PyTorch|The library used to train the model|
 |MLFlow|Experiment tracking, and to store model evaluation result to be calculated by NannyML|
 |NannyML|The drift report calculator, mainly because I find the Evidently `dict` report has no standardized structure/type hint, and can be a pain to upload to database|
 |PostgreSQL|Database for storing the drift report info and other services data|
@@ -43,10 +44,10 @@ The original dataframe is already included in this repo though, and has been ren
 4. Run the preprocess script (`make preprocess`) to upload the data to lakeFS repo
     - This will create a new commit to the lakeFS repo
 5. Run the evaluation script (`make evaluate`)
-    - This will automatically run the training workflow (`make train`) if needed, test the models, and mark the best model for you (by using a version alias)
-    - If no drift report is generated, this is normal because we only have 1 commit so far and no reference data yet
-    - To generate a drift report, we need a minimum of 2 commits (excluding the initial dummy commit)
-    - Make sure you run an evaluation for each commit because the evaluation data is tied to the commit id
-    - If a commit has no evaluation, it will be skipped because it can't find the evaluation data tied to that commit
+    - This will automatically run the training workflow (`make train`) if needed (e.g. if no model yet or the test result is below the metric threshold), compare the models, and switch/mark the best model for you (by using a version alias)
+    - If no drift report is generated, this is normal because we only have 1 commit so far and no reference data yet. To generate a drift report, we need a minimum of 2 commits (excluding the initial dummy commit)
+    - Make sure you run an evaluation for each commit because the evaluation data is tied to the commit id. If a commit has no evaluation, it will be skipped because it can't find the evaluation data tied to that commit
 6. To serve the best model, simply run the predict script (`make predict`)
+    - Open the [web UI](http://localhost:8765) to test the image upload and pawpularity prediction (it will load the best model from MLFlow registry)
     - Currently it doesn't auto refresh the best model once you run it, I may improve it later
+    - The port has been changed from 8000 to 8765 to avoid conflict with lakeFS

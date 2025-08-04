@@ -6,7 +6,6 @@ import polars as pl
 from pathlib import Path
 
 from _pydantic.common import MLFlowConf
-from _pydantic.predict import PredictPost
 from _pydantic.train_test import TestParams, MLFlowModel
 
 from _ml.model import PawDataLoader
@@ -162,4 +161,4 @@ def main():
     return HTMLResponse(html_content)
 
 if __name__ == '__main__':
-    uvicorn.run(app)
+    uvicorn.run(app, port = 8765)
