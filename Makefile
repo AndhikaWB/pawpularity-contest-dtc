@@ -1,27 +1,31 @@
-.PHONY: setup mlflow train
+.PHONY: setup preprocess train evaluate predict compose compose_down
 .ONESHELL:
 
 setup:
 	conda env create -f conda.yaml
 	conda activate pytorch
 
-mlflow:
+preprocess:
 	conda activate pytorch
-	mlflow ui -h 127.0.0.1 -p 5000 \
-		--backend-store-uri "sqlite:///mlflow/mlruns.db" \
-		--default-artifact-root "mlflow-artifacts:/" \
-		--artifacts-destination "file:///${CURDIR}/mlflow/mlartifacts"
-		--serve-artifacts
+	python src/preprocess.py
 
 train:
 	conda activate pytorch
 	python src/training.py
 
+evaluate:
+	conda activate pytorch
+	python src/evaluation.py
+
+predict:
+	conda activate pytorch
+	python src/prediction.py
+
 compose:
 	cd docker
 	docker compose --env-file .env.dev up
 
-composed:
+compose_down:
 	cd docker
 	rm -rf home
 	rm -rf var

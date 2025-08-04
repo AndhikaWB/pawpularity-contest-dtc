@@ -1,6 +1,7 @@
 import mlflow
 import dotenv
 import warnings
+import polars as pl
 from pathlib import Path
 from datetime import datetime
 
@@ -10,16 +11,21 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from _s3.lakefs import get_exact_commit, replace_branch
 from _pydantic.common import LakeFSConf, MLFlowConf, S3Conf
 from _pydantic.train_test import (
-    TestParams, TestResult, TrainParams, TrainTags, MLFlowModel
+    TestParams, TestSummary, TrainParams, TrainTags, MLFlowModel
 )
 
 from _ml.tester import Tester
 from _ml.utils import MetricTester
+from _monitoring.reporter import Reporter
+from _pydantic.report import ReportConf
 from training import run as training_run
 
+from prefect import flow, task
 
+
+@task
 def get_data_commit_id(
-    data_source_repo: str, lfs_cfg: LakeFSConf, check_date: bool = True
+    data_source_repo: str, lfs_cfg: LakeFSConf, check_date: bool = False
 ) -> str | tuple[str, str]:
     commit = get_exact_commit(data_source_repo, lfs_cfg, return_id = False)
     if not commit:
@@ -37,7 +43,7 @@ def get_data_commit_id(
 
     return commit.id
 
-
+@task
 def get_best_model_version(mlf_model: MLFlowModel, mlf_cfg: MLFlowConf) -> str | None:
     mlf_cfg.expose_auth_to_env()
     mlflow.set_tracking_uri(mlf_cfg.tracking_uri)
@@ -62,21 +68,21 @@ def get_best_model_version(mlf_model: MLFlowModel, mlf_cfg: MLFlowConf) -> str |
 
     print(
         f'Alias "{alias}" is tied to model version "{version}"' if version
-        else f'No model version found under the alias "{alias}"'
+        else f'No model version under the alias "{alias}" yet'
     )
 
     return version
 
-
+@task
 def evaluate_model(
     version: str, params: TestParams, mlf_model: MLFlowModel, mlf_cfg: MLFlowConf,
     s3_cfg: S3Conf
-) -> TestResult:
+) -> TestSummary:
     if not (params.csv_dir or params.img_dir or params.data_commit_id):
         raise ValueError('Data sources or commit id can\'t be empty')
 
     print(
-        f'Testing model version "{version}" with data from commit id '
+        f'Evaluating model version "{version}" with data from commit id '
         f'"{params.data_commit_id[:8]}"'
     )
     
@@ -96,49 +102,91 @@ def evaluate_model(
     # The data source will be used here to make the prediction
     df = tester.predict(params, mlf_cfg, s3_cfg)
     # The model id (if not None) will be tied here with the evaluation
-    result = tester.run_evaluation(df, params, mlf_cfg)
+    summary = tester.run_evaluation(df, params, mlf_cfg)
 
-    return result
+    print(f'Generated evaluation run id "{summary.run_id}"')
+    return summary
 
-
+@task
 def set_best_model_version(
-    result: TestResult, mlf_model: MLFlowModel, mlf_cfg: MLFlowConf
+    summary: TestSummary, mlf_model: MLFlowModel, mlf_cfg: MLFlowConf
 ) -> str:
     mlf_cfg.expose_auth_to_env()
     mlflow.set_tracking_uri(mlf_cfg.tracking_uri)
     client = mlflow.MlflowClient()
 
+    print('Setting the best model version alias')
+
     client.set_registered_model_alias(
         mlf_model.model_registry_name,
         mlf_model.best_version_alias,
-        result.model_version
+        summary.model_version
     )
 
     tags = {
         # NOTE: Check the training script for possible tag conflicts
         'model_marked_best_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'test_data_commit_id': result.data_commit_id
+        'test_data_commit_id': summary.data_commit_id
     }
 
     for key, val in tags.items():
         client.set_model_version_tag(
             mlf_model.model_registry_name,
-            version = result.model_version,
+            version = summary.model_version,
             key = key,
             value = val
         )
 
-    return result.model_version
+    print(
+        f'Marked model version "{summary.model_version}" with '
+        f'alias "{mlf_model.best_version_alias}"'
+    )
 
+    return summary.model_version
 
+@task
+def generate_report(
+    ref_commit_id: str | None, summary: TestSummary, mlf_cfg: MLFlowConf,
+    report_cfg: ReportConf, table_name: str = 'monitoring'
+) -> bool:
+    if not ref_commit_id:
+        print('No reference data yet, no report generated')
+        return False
+    
+    print('Generating drift monitoring report')
+    print(f'* Current model version = {summary.model_version}')
+    print(f'* Current commit id = {summary.data_commit_id}')
+    print(f'* Reference commit id = {ref_commit_id}')
+
+    # Get current and reference data to initiate the report
+    # Without both data we can't calculate the data drift
+    cur_df = Tester.load_prediction(summary.run_id, mlf_cfg)
+    reporter = Reporter(summary.data_commit_id, cur_df)
+    ref_df = reporter.get_reference_dataframe(ref_commit_id, summary, mlf_cfg)
+
+    if type(ref_df) == pl.DataFrame:
+        # Write the drift report and save it to database
+        # To be used by Grafana or whatever tools later
+        report_df = reporter.generate_report(ref_commit_id, ref_df, summary)
+        reporter.write_report_to_db(report_df, table_name, report_cfg)
+        print(f'Written report to database table "{table_name}"')
+        return True
+
+    print('Can\'t find reference data, no report generated')
+    return False
+
+@flow
 def run(
     data_source_repo: str, data_source_creds: LakeFSConf, train_params: TrainParams,
-    train_tags: TrainTags, model_registry: MLFlowModel, mlflow_creds: MLFlowConf
+    train_tags: TrainTags, model_registry: MLFlowModel, mlflow_creds: MLFlowConf,
+    report_creds: ReportConf
 ):
     # Get the latest data commit id from lakeFS repo
     commit_id = get_data_commit_id(data_source_repo, data_source_creds)
     # Replace the branch name with the exact commit id for preciseness
     data_source_repo = replace_branch(data_source_repo, commit_id)
+    # Also get the previous commit id for drift monitoring purpose later
+    prev_commit_id = get_exact_commit(data_source_repo, data_source_creds, '~1')
 
     # Add the required params for training
     train_params.data_commit_id = commit_id
@@ -150,7 +198,7 @@ def run(
     # Get the current best model version, or return None if not exist
     cur_model = get_best_model_version(model_registry, mlflow_creds)
     # Evaluate the model (if exist) using the current data
-    cur_result = evaluate_model(
+    cur_summary = evaluate_model(
         cur_model, test_params, model_registry, mlflow_creds,
         data_source_creds.as_s3()
     ) if cur_model else None
@@ -162,53 +210,44 @@ def run(
 
     # Train a new model if we don't have any registered best model yet
     # Or if the test score is considered unsafe compared to the threshold
-    if not (cur_model or metric.is_safe(cur_result.score)):
+    if not cur_model or not metric.is_safe(cur_summary.score):
         new_model = training_run(
             data_source_repo, data_source_creds,
             train_params, train_tags,
             model_registry, mlflow_creds
         )
 
-        new_result = evaluate_model(
+        new_summary = evaluate_model(
             new_model, test_params, model_registry, mlflow_creds,
             data_source_creds.as_s3()
         )
 
-        print(
-            # Report credentials
-            # Database credentials?
-        )
-
-        if metric.is_safe(new_result.score):
-            if cur_model and metric.better_than(cur_result.score, new_result.score):
+        if metric.is_safe(new_summary.score):
+            if cur_model and metric.is_better(cur_summary.score, new_summary.score):
                 # If the current model is better than the new model
                 # Generate report but no need to change the best model
-                set_best_model_version(cur_result, model_registry, mlflow_creds)
-                print(
-                    # Current model
-                    # Current test run (to get input dataframe)
-                    # Current data commit id (to check previous test run as reference)
-                    # MLFlow model registry
-                    # MLFlow credentials
-                )
+                set_best_model_version(cur_summary, model_registry, mlflow_creds)
+                generate_report(prev_commit_id, cur_summary, mlflow_creds, report_creds)
             else:
                 # If there's no current model, or the new model is better
                 # Generate report and also change the best model
-                set_best_model_version(new_result, model_registry, mlflow_creds)
-                pass
+                set_best_model_version(new_summary, model_registry, mlflow_creds)
+                generate_report(prev_commit_id, new_summary, mlflow_creds, report_creds)
         else:
-            # If both model test results are still bad
+            # If both current and new model test summaries are still bad
             # Generate report and choose the better model for now
-            # The alert is managed by the dashboard, not by this code
-            if metric.better_than(cur_result.score, new_result.score):
-                set_best_model_version(cur_result, model_registry, mlflow_creds)
+            # The alert must be managed separately by the dashboard
+            if not cur_model or metric.is_better(new_summary.score, cur_summary.score):
+                set_best_model_version(new_summary, model_registry, mlflow_creds)
+                generate_report(prev_commit_id, new_summary, mlflow_creds, report_creds)
             else:
-                set_best_model_version(new_result, model_registry, mlflow_creds)
-            
+                set_best_model_version(cur_summary, model_registry, mlflow_creds)
+                generate_report(prev_commit_id, cur_summary, mlflow_creds, report_creds)
     else:
-        # If the current model test result is still good
+        # If the current model test summary is still good
         # Generate report and no need to train a new model
-        set_best_model_version(cur_result, model_registry, mlflow_creds)
+        set_best_model_version(cur_summary, model_registry, mlflow_creds)
+        generate_report(prev_commit_id, cur_summary, mlflow_creds, report_creds)
 
 
 if __name__ == '__main__':
@@ -229,12 +268,13 @@ if __name__ == '__main__':
         data_source_repo: str = Field(alias = 'TRAIN_DATA_SOURCE')
         data_source_creds: LakeFSConf = Field(default_factory = LakeFSConf)
 
-        # No need for factory if it doesn't read environment variable
-        train_params: TrainParams = TrainParams()
-        train_tags: TrainTags = TrainTags()
+        train_params: TrainParams = Field(default_factory = TrainParams)
+        train_tags: TrainTags = Field(default_factory = TrainTags)
 
         model_registry: MLFlowModel = Field(default_factory = MLFlowModel)
         mlflow_creds: MLFlowConf = Field(default_factory = MLFlowConf)
+
+        report_creds: ReportConf = Field(default_factory = ReportConf)
 
         @field_validator('train_tags', mode = 'after')
         @classmethod
@@ -252,5 +292,6 @@ if __name__ == '__main__':
     run(
         args.data_source_repo, args.data_source_creds,
         args.train_params, args.train_tags,
-        args.model_registry, args.mlflow_creds
+        args.model_registry, args.mlflow_creds,
+        args.report_creds
     )

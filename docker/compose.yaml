@@ -114,13 +114,15 @@ services:
     volumes:
       # Postgres data directory
       - ./var/lib/postgresql/data:/var/lib/postgresql/data
-      # Create new lakeFS user and database
+      # Create new user and database for lakeFS
       - ./init/postgres/lakefs.sql:/docker-entrypoint-initdb.d/lakefs.sql
+      # Create new user and database for drift monitoring
+      - ./init/postgres/pawpaw.sql:/docker-entrypoint-initdb.d/pawpaw.sql
     ports:
       # Postgres connection port
       - 5432:5432
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "lakefs"]
+      test: ["CMD", "pg_isready"]
       start_period: 30s
       interval: 10s
       timeout: 5s

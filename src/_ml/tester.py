@@ -10,7 +10,7 @@ from mlflow.data.pandas_dataset import PandasDataset
 from mlflow.data.http_dataset_source import HTTPDatasetSource
 from mlflow.models.evaluation import EvaluationResult
 
-from _pydantic.train_test import TestParams, TestResult
+from _pydantic.train_test import TestParams, TestSummary
 from _pydantic.common import MLFlowConf, S3Conf
 
 
@@ -28,9 +28,6 @@ class Tester:
         # This is optional by nice to have for tracking purpose
         if not model_id and model_uri.startswith('models:/'):
             self.model_id = model_uri[len('models:/'):]
-
-    def get_dataframe():
-        pass
 
     def predict(
         self, params: TestParams, mlf_cfg: MLFlowConf, s3_cfg: S3Conf
@@ -71,8 +68,10 @@ class Tester:
         preds = torch.cat([
             model(ds['image'], ds['features'])
             for ds in test_loader
-        ]).numpy(force = True)
+        ])
 
+        # TODO: Investigate why the prediction shape is 2D
+        preds = preds.view(-1).numpy(force = True)
         # Add the stacked predictions as a single column
         df = df.insert_column(len(df.columns), pl.Series('Prediction', preds))
         # Clean back the cache dir
@@ -82,7 +81,7 @@ class Tester:
 
     def run_evaluation(
         self, df: pl.DataFrame, params: TestParams, mlf_cfg: MLFlowConf
-    ) -> TestResult:
+    ) -> TestSummary:
         mlf_cfg.expose_auth_to_env()
         mlflow.set_tracking_uri(mlf_cfg.tracking_uri)
         mlflow.set_experiment(mlf_cfg.experiment_name)
@@ -91,6 +90,8 @@ class Tester:
             dataset = PandasDataset(
                 df.to_pandas(),
                 name = 'lakeFS',
+                targets = 'Pawpularity',
+                predictions = 'Prediction',
                 source = HTTPDatasetSource(params.csv_dir),
                 digest = params.data_commit_id[:8]
             )
@@ -105,8 +106,6 @@ class Tester:
 
             result = mlflow.evaluate(
                 data = dataset,
-                predictions = 'Prediction',
-                targets = 'Pawpularity',
                 model_type = 'regressor',
                 model_id = self.model_id
             )
@@ -115,7 +114,7 @@ class Tester:
             if type(result) == EvaluationResult:
                 result = result
 
-        return TestResult(
+        return TestSummary(
             run_id = result.run_id,
             data_commit_id = params.data_commit_id,
             model_uri = self.model_uri,
@@ -123,6 +122,7 @@ class Tester:
             model_registry_name = self.model_name,
             metric = params.metric,
             metric_min = params.metric_min,
+            metric_threshold = params.metric_threshold,
             score = result.metrics[params.metric]
         )
 

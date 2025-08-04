@@ -14,7 +14,7 @@ import torchmetrics as tm
 
 from _pydantic.common import MLFlowConf
 from _ml.utils import LossMetric, EarlyStopping, QSave
-from _pydantic.train_test import TrainParams, TrainTags, TrainResult
+from _pydantic.train_test import TrainParams, TrainTags, TrainSummary
 
 
 class Trainer:
@@ -80,7 +80,7 @@ class Trainer:
         df = getattr(self.train_loader.dataset, 'df', None)
         column_schemas = None
 
-        if df and type(df) == pl.DataFrame:
+        if type(df) == pl.DataFrame:
             column_specs = []
 
             for i in range(len(df.columns)):
@@ -246,7 +246,7 @@ class Trainer:
 
     def get_best_model(
         self, run_id: str, params: TrainParams, mlf_cfg: MLFlowConf, delete_others: bool
-    ) -> TrainResult:
+    ) -> TrainSummary:
         if not (run_id or params.monitor):
             raise ValueError('Run id or metric to compare can\'t be empty')
 
@@ -287,7 +287,7 @@ class Trainer:
             if metric.key == params.monitor:
                 metric_value = metric.value
 
-        return TrainResult(
+        return TrainSummary(
             run_id = run_id,
             data_commit_id = params.data_commit_id,
             model_uri = best_model_uri,

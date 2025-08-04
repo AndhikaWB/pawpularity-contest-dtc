@@ -46,7 +46,7 @@ class MLFlowConf(BaseSettings):
     """
 
     # Allows adding extra parameters not listed below when instantiating the class
-    model_config = SettingsConfigDict(validate_by_name = True)
+    model_config = SettingsConfigDict(validate_by_name = True, validate_default = False)
 
     # Will read aliases from environment variable if they exist
     tracking_uri: Annotated[str, Field(validation_alias = 'MLFLOW_TRACKING_URI')] = 'http://localhost:5000'
@@ -65,7 +65,7 @@ class MLFlowConf(BaseSettings):
 
 
 class S3Conf(BaseSettings):
-    model_config = SettingsConfigDict(validate_by_name = True)
+    model_config = SettingsConfigDict(validate_by_name = True, validate_default = False)
     
     endpoint_url: Annotated[str, Field(validation_alias = 'AWS_ENDPOINT_URL')] = 'http://localhost:9000'
     aws_access_key_id: Annotated[str, Field(validation_alias = 'AWS_ACCESS_KEY_ID')]
@@ -73,7 +73,7 @@ class S3Conf(BaseSettings):
 
 
 class MinIOConf(BaseSettings):
-    model_config = SettingsConfigDict(validate_by_name = True)
+    model_config = SettingsConfigDict(validate_by_name = True, validate_default = False)
 
     # MinIO actually doesn't read any environment variable to set the endpoint URL
     # There was MINIO_SERVER_URL but it has been deprecated and may cause issues if used
@@ -91,7 +91,7 @@ class MinIOConf(BaseSettings):
 
 
 class LakeFSConf(BaseSettings):
-    model_config = SettingsConfigDict(validate_by_name = True)
+    model_config = SettingsConfigDict(validate_by_name = True, validate_default = False)
 
     host: Annotated[str, Field(validation_alias = 'LAKECTL_SERVER_ENDPOINT_URL')] = 'http://localhost:8000'
     username: Annotated[str, Field(validation_alias = 'LAKECTL_CREDENTIALS_ACCESS_KEY_ID')]

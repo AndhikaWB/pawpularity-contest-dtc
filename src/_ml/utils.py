@@ -144,7 +144,7 @@ class MetricTester:
         self.threshold = threshold
         self.min_is_better = min_is_better
     
-    def better_than(self, a: float, b: float):
+    def is_better(self, a: float, b: float):
         """Returns True if value "a" is better than or equal to value "b"."""
 
         # Why the equal operator? Because we shouldn't change the model unnecessarily

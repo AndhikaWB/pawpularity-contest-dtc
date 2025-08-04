@@ -123,8 +123,5 @@ def commit_branch(
     client = lakefs.Client(**dict(lfs_cfg))
     repo = lakefs.Repository(repo_id, client = client)
 
-    print(f'Commiting changes to "{repo_id}/{branch}"')
     commit = repo.branch(branch).commit(message = message)
-
-    print(f'Saved changes as commit id "{commit.id}"')
     return commit.id

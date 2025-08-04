@@ -1,9 +1,12 @@
 # Junk folders
 __pycache__/
 
+# Data folder
+/data/
+!/data/raw/data.csv
+
 # Temporary folders
 /model/
-/data/
 
 # Docker shared volumes
 /docker/*

@@ -19,7 +19,7 @@ class MLFlowModel(BaseSettings):
             e.g. after doing an evaluation and comparing the metric. Defaults to 'best'.
     """
 
-    model_config = SettingsConfigDict(validate_by_name = True)
+    model_config = SettingsConfigDict(validate_by_name = True, validate_default = False)
 
     # TODO: Make it so we can switch environment/promote model easily
     model_registry_name: Annotated[str, Field(validation_alias = 'DEV_MODEL_REGISTRY_NAME')]
@@ -27,9 +27,10 @@ class MLFlowModel(BaseSettings):
 
 
 class TestParams(BaseSettings):
-    model_config = SettingsConfigDict(validate_by_name = True)
+    model_config = SettingsConfigDict(validate_by_name = True, validate_default = False)
 
-    # Use this solely for testing purpose only, not for training
+    # Metric name here must match the name returned by "mlflow.evaluate" function
+    # So it may be different from training metric (e.g. rmse vs root_mean_square_error)
     metric: Annotated[str, Field(validation_alias = 'TEST_METRIC')]
     metric_min: Annotated[bool, Field(validation_alias = 'TEST_METRIC_MIN')] = True
     metric_threshold: Annotated[float, Field(validation_alias = 'TEST_METRIC_THRESHOLD')]
@@ -52,14 +53,14 @@ class TrainParams(BaseSettings):
     MLFlow when starting the training run.
     """
 
-    model_config = SettingsConfigDict(validate_by_name = True)
+    model_config = SettingsConfigDict(validate_by_name = True, validate_default = False)
 
     # User inputs, configurable via CLI arguments or environment variables
     img_size: Annotated[tuple[int, int], Field(validation_alias = 'TRAIN_IMG_SIZE')] = (128, 128)
     seed: Annotated[int, Field(validation_alias = 'TRAIN_SEED')] = 1337
     lr: Annotated[float, Field(ge = 0.00, validation_alias = 'TRAIN_LR')] = 0.001
     batch_size: Annotated[int, Field(ge = 1, validation_alias = 'TRAIN_BATCH_SIZE')] = 64
-    epochs: Annotated[int, Field(ge = 1, validation_alias = 'TRAIN_EPOCH')] = 20
+    epochs: Annotated[int, Field(ge = 1, validation_alias = 'TRAIN_EPOCH')] = 1
     patience: Annotated[int, Field(ge = 1, validation_alias = 'TRAIN_PATIENCE')] = 5
 
     # To filter from other types of run
@@ -73,6 +74,8 @@ class TrainParams(BaseSettings):
     # Will be set when preparing for training
     optimizer: Annotated[str, Field(description = SUPPRESS)] = None
     criterion: Annotated[str, Field(description = SUPPRESS)] = None
+    # There's currently no standard for the metric name used here
+    # It's totally up to the creator who made the training script
     monitor: Annotated[str, Field(description = SUPPRESS)] = None
     monitor_min: Annotated[bool, Field(description = SUPPRESS)] = True
 
@@ -106,7 +109,7 @@ class TrainTags(BaseSettings):
             production ready. Defaults to 'py'.
     """
 
-    model_config = SettingsConfigDict(validate_by_name = True)
+    model_config = SettingsConfigDict(validate_by_name = True, validate_default = False)
 
     author: Annotated[str, Field(validation_alias = 'TRAIN_TAG_AUTHOR')] = 'Bot'
     framework: Annotated[str, Field(validation_alias = 'TRAIN_TAG_FRAMEWORK')] = 'PyTorch'
@@ -114,7 +117,7 @@ class TrainTags(BaseSettings):
     extension: Annotated[str, Field(validation_alias = 'TRAIN_TAG_EXTENSION')] = 'py'
 
 
-class TrainResult(BaseModel):
+class TrainSummary(BaseModel):
     run_id: str
     data_commit_id: str
     model_uri: str
@@ -124,7 +127,7 @@ class TrainResult(BaseModel):
     score: float
 
 
-class TestResult(BaseModel):
+class TestSummary(BaseModel):
     run_id: str
     data_commit_id: str
     model_uri: str
@@ -134,4 +137,5 @@ class TestResult(BaseModel):
 
     metric: str
     metric_min: bool
+    metric_threshold: float
     score: float
