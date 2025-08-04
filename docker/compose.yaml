@@ -16,7 +16,7 @@ x-mlops-common:
 services:
   juicefs:
     <<: *mlops-common
-    image: juicedata/mount:latest
+    image: juicedata/mount:ce-v1.2.3
     volumes:
       # SQLite database for JuiceFS
       - ./home/juicefs:/home/juicefs
@@ -45,7 +45,7 @@ services:
 
   awscli:
     <<: *mlops-common
-    image: amazon/aws-cli:latest
+    image: amazon/aws-cli:2.23.15
     depends_on:
       juicefs:
         condition: service_healthy
@@ -63,7 +63,7 @@ services:
         fi
 
   mlflow:
-    image: ghcr.io/mlflow/mlflow:latest
+    image: ghcr.io/mlflow/mlflow:v3.1.4
     environment:
       <<: *mlops-common-env
       # We should actually use separate secret key, I'm just lazy
@@ -107,7 +107,7 @@ services:
     restart: unless-stopped
 
   postgres:
-    image: postgres:latest
+    image: postgres:14.18
     environment:
       POSTGRES_USER: ${_POSTGRES_ADMIN_USERNAME}
       POSTGRES_PASSWORD: ${_POSTGRES_ADMIN_PASSWORD}
@@ -130,7 +130,7 @@ services:
     restart: unless-stopped
 
   lakefs:
-    image: treeverse/lakefs:latest
+    image: treeverse/lakefs:1.60
     environment:
       LAKEFS_DATABASE_TYPE: postgres
       LAKEFS_DATABASE_POSTGRES_CONNECTION_STRING: postgres://${_DB_LAKEFS_USERNAME}:${_DB_LAKEFS_PASSWORD}@postgres:5432/${_DB_LAKEFS_DBNAME}

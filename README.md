@@ -1,4 +1,4 @@
-# Pawpularity Prediction
+# Pet Pawpularity Prediction
 
 Ever wondered how cute your pet is compared to other people's pet? Say no more! Just upload your cutest pet picture and my model will predict the pawpularity score for you.
 

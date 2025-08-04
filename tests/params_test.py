@@ -3,7 +3,7 @@ import dotenv
 import unittest
 from pathlib import Path
 
-from src._pydantic.common import LakeFSConf
+from src._pydantic.common import LakeFSConf, S3Conf
 from src._pydantic.train_test import TrainParams, TestParams, MLFlowModel
 
 
@@ -40,6 +40,11 @@ class ParameterTesting(unittest.TestCase):
 
         lakefs_cfg = LakeFSConf()
         assert lakefs_cfg.username == secret_id
+    
+    def test_s3_config(self):
+        lakefs_cfg = LakeFSConf()
+        s3_cfg = lakefs_cfg.as_s3()
+        assert lakefs_cfg.host == s3_cfg.endpoint_url
 
 
 if __name__ == '__main__':
