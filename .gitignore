@@ -2,11 +2,11 @@
 __pycache__/
 
 # Data folder
-/data/
+/data/*
 !/data/raw/data.csv
 
 # Temporary folders
-/model/
+/model/*
 
 # Docker shared volumes
 /docker/*
