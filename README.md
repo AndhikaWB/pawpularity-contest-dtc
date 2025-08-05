@@ -12,6 +12,10 @@ The data is part of this [Kaggle competition](www.kaggle.com/c/petfinder-pawpula
 
 The original dataframe is already included in this repo though, and has been renamed from `train.csv` to `data.csv` to avoid confusion with data from the preprocessing step later.
 
+## Architecture
+
+![](notes/stack.png)
+
 ## Stack
 
 |Name|Description|
