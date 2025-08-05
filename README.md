@@ -55,3 +55,7 @@ The original dataframe is already included in this repo though, and has been ren
     - Open the [web UI](http://localhost:8765) to test the image upload and pawpularity prediction (it will load the best model from MLFlow registry)
     - Currently it doesn't auto refresh the best model once you run it, I may improve it later
     - The port has been changed from 8000 to 8765 to avoid conflict with lakeFS
+
+## Learning Notes
+
+Some of my learning notes, which contains the reasons why I choose some tools/softwares over the other are located on the "notes" folder. However, those notes may be outdated as I don't have time to revise them yet.
