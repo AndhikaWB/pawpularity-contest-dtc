@@ -1,47 +1,25 @@
 import polars as pl
 from datetime import datetime
 
-import mlflow
-from _ml.tester import Tester
-from _pydantic.common import MLFlowConf
-from _pydantic.train_test import TestSummary
-
 import torch
 import nannyml as nml
 from nannyml.thresholds import ConstantThreshold
-from _pydantic.report import ReportConf
 
+from _pydantic.train_test import TestSummary
+from _pydantic.report import ReportSchema, ReportConf
 
 class Reporter:
-    def __init__(self, cur_commit_id: str, cur_df: pl.DataFrame):
-        self.cur_commit_id = cur_commit_id
-        self.cur_df = cur_df
+    def __init__(self, summary: TestSummary, df: pl.DataFrame):
+        self.cur_df = df
+        self.cur_run_id = summary.run_id
+        self.cur_commit_id = summary.data_commit_id
 
-    def get_reference_dataframe(
-        self, ref_commit_id: str, summary: TestSummary, mlf_cfg: MLFlowConf
-    ) -> pl.DataFrame:
-        mlf_cfg.expose_auth_to_env()
-        mlflow.set_tracking_uri(mlf_cfg.tracking_uri)
+        # Current and reference data must use the same metric
+        self.metric = summary.metric
+        self.metric_threshold = summary.metric_threshold
 
-        # Find existing evaluation run with a specific commit id
-        logged_runs = mlflow.search_runs(
-            experiment_names = [mlf_cfg.experiment_name],
-            filter_string = f'params.data_commit_id = \'{ref_commit_id}\' AND '
-                f'params.metric = \'{summary.metric}\'',
-            order_by = [
-                f'metrics.{summary.metric} {'ASC' if summary.metric_min else 'DESC'}'
-            ],
-            output_format = 'list'
-        )
-
-        if logged_runs:
-            # Try to load the prediction dataframe from that run
-            df = Tester.load_prediction(logged_runs[0].info.run_id, mlf_cfg)
-            return df
-        
-        return None
-
-    def metric_converter(self, mlflow_metric: str) -> str:
+    @staticmethod
+    def metric_converter(mlflow_metric: str) -> str:
         """Convert MLFlow metric to NannyML metric (if available)."""
 
         metrics = {
@@ -54,11 +32,41 @@ class Reporter:
         return metrics[mlflow_metric]
 
     def generate_report(
-        self, ref_commit_id: str, ref_df: pl.DataFrame, summary: TestSummary,
+        self, ref_run_id: str, ref_commit_id: str, ref_df: pl.DataFrame,
+        drift_threshold: float = 0.1, alert_ratio_threshold: float = 0.3,
         chunk_size: int = 1000
     ) -> pl.DataFrame:
-        if type(ref_df) != pl.DataFrame:
-            raise ValueError('Reference data can\'t be empty')
+        """Generate drift report between current data and reference data.
+
+        Args:
+            ref_run_id (str): MLFlow run id associated with the reference data.
+            ref_commit_id (str): Data commit id associated with the reference data.
+            ref_df (pl.DataFrame): Reference data to be compared with the current data.
+            drift_threshold (float, optional): How many differences between current and
+                reference data to be considered a drift (only used for data drift, not
+                metric drift). Uses a value between 0 and 1, 0 means identical data and
+                1 means total difference. Defaults to 0.1.
+            alert_ratio_threshold (float, optional): How many share of drifted chunks to
+                finally announce that the whole column/data, has in fact, drifted. Used
+                for both data and metric drift, and has a value between 0 and 1.
+                Defaults to 0.3.
+            chunk_size (int, optional): Used to divide the data into multiple chunks.
+                Defaults to 1000 rows. Each chunk will have it's own drift and alert
+                status, refer to the `alert_ratio_threshold` above for how the final
+                decision is made. 
+
+        Raises:
+            ValueError: If there's no reference data or commit id (so we can't calculate
+                the drift).
+
+        Returns:
+            pl.DataFrame: Dataframe containing info about the drift and alert status,
+                the metric name and drift method used, and other useful info. Can be
+                uploaded to a database later.
+        """
+
+        if type(ref_df) != pl.DataFrame or not ref_commit_id:
+            raise ValueError('Reference data or commit id can\'t be empty')
 
         # Disable NannyML analytics
         nml.disable_usage_logging()
@@ -67,26 +75,17 @@ class Reporter:
         ref_df = ref_df.to_pandas()
 
         # All columns except image id
-        all_cols = [col for col in cur_df.columns if col != 'Id']
+        all_cols = [col for col in self.cur_df.columns if col != 'Id']
         # Target and prediction
         cont_cols = ['Pawpularity', 'Prediction']
         # Binary features, can be treated as categorical or continuous
         bin_cols = [col for col in all_cols if col not in cont_cols]
 
-        # Performance metric for the prediction result (e.g. RMSE)
-        metric = self.metric_converter(summary.metric)
-
-        # After reading a bit, Jensen-Shannon seems perfect for me
-        # It's not too sensitive like KS, but can be slow for big data
+        # Used only for data drift, for performance metric please see below
+        # JS is not too sensitive like KS, but can be slow for big data
         drift_method = 'jensen_shannon'
-        # Jensen-Shannon score is not the same as p-value
-        # 0 means identical data and 1 means very different
-        drift_threshold = 0.1
-
-        # How many drifted chunks are considered safe, compared to total chunks
-        # If you have 10 chunks and 6 of them drifted, then it's 0.6 ratio
-        # Since 0.6 is more than 0.4, we can say that column/prediction drifted
-        alert_ratio_threshold = 0.4
+        # Performance metric for the prediction result (e.g. RMSE)
+        metric = self.metric_converter(self.metric)
 
         calc = nml.UnivariateDriftCalculator(
             column_names = all_cols,
@@ -108,7 +107,7 @@ class Reporter:
             problem_type = 'regression',
             y_pred = 'Prediction',
             y_true = 'Pawpularity',
-            thresholds = {metric: ConstantThreshold(upper = summary.metric_threshold)},
+            thresholds = {metric: ConstantThreshold(upper = self.metric_threshold)},
             chunk_size = chunk_size
         )
 
@@ -134,31 +133,39 @@ class Reporter:
             alert_ratio = alert_col.value_counts(normalize = True).get(True, 0)
             # How many chunks drifted (the actual count, not ratio)
             alert_count = alert_col.value_counts().get(True, 0)
+            safe_count = alert_col.value_counts().get(False, 0)
 
-            table.append({
-                'datetime': current_time,
-                'model_version_current': summary.model_version,
-                # Commit id of the data (from lakeFS)
-                'commit_id_current': self.cur_commit_id,
-                # Reference for drift, uses previous commit by default
-                'commit_id_reference': ref_commit_id,
-                'column_name': name,
-                'method': method,
-                # The average drift/score/error value of all chunks
-                'value_average': value_col.mean(),
-                # Threshold is always constant, aggregation doesn't matter
-                'value_threshold': thres_col.min(),
-                'alert_count': alert_count,
-                'alert_ratio': alert_ratio,
-                'alert_ratio_threshold': alert_ratio_threshold,
-                # Whether the alert ratio pass the threshold or not (True/False)
-                'alert': alert_ratio >= alert_ratio_threshold
-            })
-        
+            table.append(
+                ReportSchema(
+                    time = current_time,
+                    # MLFlow run id containing the evaluation data
+                    # You can trace the model URI, etc. from this run id
+                    run_id_current = self.cur_run_id,
+                    run_id_reference = ref_run_id,
+                    # Data commit id used in the evaluation run
+                    commit_id_current = self.cur_commit_id,
+                    commit_id_reference = ref_commit_id,
+                    column_name = name,
+                    method = method,
+                    # The average drift/score/error value of all chunks
+                    value_average = value_col.mean(),
+                    # Value threshold to be considered dangerous
+                    value_threshold = thres_col.item(),
+                    # The number of safe/alerting chunks
+                    safe_count = safe_count,
+                    alert_count = alert_count,
+                    alert_ratio = alert_ratio,
+                    alert_ratio_threshold = alert_ratio_threshold,
+                    # Whether the alert ratio pass the threshold or not
+                    alert = alert_ratio >= alert_ratio_threshold
+                ).model_dump()
+            )
+
         return pl.DataFrame(table)
     
+    @staticmethod
     def write_report_to_db(
-        self, df: pl.DataFrame, table_name: str, report_cfg: ReportConf
+        df: pl.DataFrame, table_name: str, report_cfg: ReportConf
     ) -> int:
         affected_rows = df.write_database(
             table_name,

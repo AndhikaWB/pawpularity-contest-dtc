@@ -33,7 +33,7 @@ class PawDataset(Dataset):
             # Extract the bucket and key from the full S3 path
             bucket, img_dir = get_bucket_key(self.img_dir)
 
-            s3 = boto3.resource('s3', **dict(s3_cfg))
+            s3 = boto3.resource('s3', **s3_cfg.model_dump())
             self.bucket = s3.Bucket(bucket)
             # Image dir now becomes path after the bucket
             self.img_dir = img_dir
@@ -177,7 +177,7 @@ class PawDataLoader:
             return cls.csv_path
 
         # Source the CSV file from S3 when provided
-        s3_cfg = dict(cls.s3_cfg) if cls.s3_cfg else None
+        s3_cfg = cls.s3_cfg.model_dump() if cls.s3_cfg else None
         return pl.scan_csv(cls.csv_path, storage_options = s3_cfg).collect()
     
     @classmethod

@@ -1,33 +1,53 @@
 # Bypass line length limit
 # ruff: noqa: E501
 
-from argparse import SUPPRESS
 from typing import Annotated
+from argparse import SUPPRESS
+from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class MLFlowModel(BaseSettings):
-    """Used when registering, testing, or promoting an MLFlow model.
+    """Used when registering, loading, or promoting an MLFlow model.
 
     Args:
-        model_registry_name (str): Name to use when loading or registering a model. Each
+        environment (str, optional): Environment name to use alongside the raw model
+            name. Useful if you want to promote or use multiple model environments.
+            Defaults to 'dev'.
+        raw_model_name (str): Name to use when registering or searching a model. Each
             time we register a model under this name, it will be added as a new model
-            version.
-        best_version_alias (str, optional): Alias to set for the best model version,
-            e.g. after doing an evaluation and comparing the metric. Defaults to 'best'.
+            version. For a better practice, please use `model_registry_name` instead, it
+            adds the environment before the raw model name.
+        best_version_alias (str, optional): Alias for the best model version. Used to
+            differentiate it from other model version, and for easy model loading later.
+            Defaults to 'best'.
     """
 
-    model_config = SettingsConfigDict(validate_by_name = True, validate_default = False)
+    model_config = SettingsConfigDict(validate_by_name = True, validate_default = False, extra = 'allow')
 
-    # TODO: Make it so we can switch environment/promote model easily
-    model_registry_name: Annotated[str, Field(validation_alias = 'DEV_MODEL_REGISTRY_NAME')]
-    best_version_alias: Annotated[str, Field(validation_alias = 'DEV_BEST_VERSION_ALIAS')] = 'best'
+    # You can change the environment if you want to promote the model later
+    environment: Annotated[str, Field(validation_alias = 'TRAIN_MODEL_REGISTRY_ENV')] = 'dev'
+    raw_model_name: Annotated[str, Field(validation_alias = 'TRAIN_MODEL_REGISTRY_NAME')]
+    best_version_alias: Annotated[str, Field(validation_alias = 'TEST_BEST_VERSION_ALIAS')] = 'best'
+
+    @computed_field
+    @property
+    def model_registry_name(self) -> str:
+        """Return the environment together with the model name (e.g. `dev.model_name`).
+        This is the suggested way by MLFlow for registering a model.
+        """
+
+        return f'{self.environment}.{self.raw_model_name}'
 
 
 class TestParams(BaseSettings):
-    model_config = SettingsConfigDict(validate_by_name = True, validate_default = False)
+    """Parameters that will be used to configure the testing process, and logged to
+    MLFlow when starting an evaluation run.
+    """
+
+    model_config = SettingsConfigDict(validate_by_name = True, validate_default = False, extra = 'allow')
 
     # Metric name here must match the name returned by "mlflow.evaluate" function
     # So it may be different from training metric (e.g. rmse vs root_mean_square_error)
@@ -50,10 +70,10 @@ class TestParams(BaseSettings):
 
 class TrainParams(BaseSettings):
     """Parameters that will be used to configure the training process, and logged to
-    MLFlow when starting the training run.
+    MLFlow when starting a training run.
     """
 
-    model_config = SettingsConfigDict(validate_by_name = True, validate_default = False)
+    model_config = SettingsConfigDict(validate_by_name = True, validate_default = False, extra = 'allow')
 
     # User inputs, configurable via CLI arguments or environment variables
     img_size: Annotated[tuple[int, int], Field(validation_alias = 'TRAIN_IMG_SIZE')] = (128, 128)
@@ -93,31 +113,12 @@ class TrainParams(BaseSettings):
         )
 
 
-class TrainTags(BaseSettings):
-    """Tags to log to MLFlow when starting a run/training. Note that these run tags are
-    not the same as model tags. You can/must set separate tags for the model later.
-
-    Args:
-        author (str, optional): The responsible author name. Defaults to 'Bot'.
-        framework (str, optional): Main framework of the ML model (e.g. TensorFlow,
-            PyTorch). Defaults to 'PyTorch'.
-        model (str, optional): Model type/variant (e.g. XGBoost, CNN). You can use
-            anything but models with the same type/variant should ideally have a
-            matching tag. Defaults to 'Simple CNN'.
-        extension (str, optional): File extension to help differentiate early
-            development stage. `ipynb` is used for prototype while `py` is more
-            production ready. Defaults to 'py'.
+class TrainSummary(BaseModel):
+    """Result of a model training process from MLFlow, containing the run id, model URI,
+    and other useful info. The term "summary" is used because "result" is just too
+    common, and can be confusing when mixed with all other variables.
     """
 
-    model_config = SettingsConfigDict(validate_by_name = True, validate_default = False)
-
-    author: Annotated[str, Field(validation_alias = 'TRAIN_TAG_AUTHOR')] = 'Bot'
-    framework: Annotated[str, Field(validation_alias = 'TRAIN_TAG_FRAMEWORK')] = 'PyTorch'
-    model: Annotated[str, Field(description = 'TRAIN_TAG_MODEL')] = 'Simple CNN'
-    extension: Annotated[str, Field(validation_alias = 'TRAIN_TAG_EXTENSION')] = 'py'
-
-
-class TrainSummary(BaseModel):
     run_id: str
     data_commit_id: str
     model_uri: str
@@ -128,6 +129,11 @@ class TrainSummary(BaseModel):
 
 
 class TestSummary(BaseModel):
+    """Result of a model testing process from MLFlow, containing the run id, model URI,
+    and other useful info. The term "summary" is used because "result" is just too
+    common, and can be confusing when mixed with all other variables.
+    """
+
     run_id: str
     data_commit_id: str
     model_uri: str
@@ -139,3 +145,36 @@ class TestSummary(BaseModel):
     metric_min: bool
     metric_threshold: float
     score: float
+
+
+class ModelRegisTags(BaseModel):
+    """Tags to attach (to MLFlow model) when registering a new model version."""
+
+    model_config = SettingsConfigDict(validate_by_name = True, validate_default = False, extra = 'allow')
+
+    model_registered_at: Annotated[str, Field(description = SUPPRESS)] = None
+    train_data_commit_id: Annotated[str, Field(description = SUPPRESS)] = None
+
+    framework: Annotated[str, Field(validation_alias = 'MODEL_TAG_FRAMEWORK')] = 'PyTorch'
+    variant: Annotated[str, Field(description = 'MODEL_TAG_VARIANT')] = 'Simple CNN'
+
+    @staticmethod
+    def datetime_now() -> str:
+        """Get the current date and time as string."""
+
+        return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+
+class ModelBestTags(BaseModel):
+    """Tags to attach (to MLFlow model) when registering an alias for the current
+    best model version.
+    """
+
+    model_marked_best_at: str
+    test_data_commit_id: str
+
+    @staticmethod
+    def datetime_now() -> str:
+        """Get the current date and time as string."""
+
+        return datetime.now().strftime('%Y-%m-%d %H:%M:%S')

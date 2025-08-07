@@ -1,18 +1,16 @@
-import warnings
 import tempfile
 from pathlib import Path
 from copy import deepcopy
-from datetime import datetime
 
 import mlflow
 from _ml.trainer import Trainer
 from _ml.model import PawDataLoader, PawModel
 
 import dotenv
-from pydantic import Field, field_validator
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from _pydantic.common import S3Conf, LakeFSConf, MLFlowConf
-from _pydantic.train_test import TrainParams, TrainTags, MLFlowModel, TrainSummary
+from _pydantic.train_test import TrainParams, MLFlowModel, TrainSummary, ModelRegisTags
 
 from _s3.lakefs import replace_branch, get_exact_commit
 
@@ -30,7 +28,7 @@ def get_data_commit_id(data_source_repo: str, lfs_cfg: LakeFSConf) -> str:
 
 @task
 def model_training(
-    params: TrainParams, tags: TrainTags, s3_cfg: S3Conf, mlf_cfg: MLFlowConf
+    params: TrainParams, s3_cfg: S3Conf, mlf_cfg: MLFlowConf
 ) -> TrainSummary:
     if not (params.csv_dir or params.img_dir or params.data_commit_id):
         raise ValueError('Data sources or commit id can\'t be empty')
@@ -68,8 +66,8 @@ def model_training(
     # Setup optimizer, early stop callback, and other things
     # This will add optimizer name, etc. to the returned params
     params = trainer.prep_training(params)
-    # Log the params and tags to MLFlow and train the model
-    run_id = trainer.start_training(params, tags, mlf_cfg)
+    # Log the params to MLFlow and train the model
+    run_id = trainer.start_training(params, mlf_cfg)
 
     # Get the best model only and delete other models from this run
     # The summary will contain run id, best model URI, and metric info
@@ -82,8 +80,8 @@ def model_training(
 
 @task
 def register_model(
-    summary: TrainSummary, mlf_model: MLFlowModel, mlf_cfg: MLFlowConf,
-    finished_only: bool = True
+    summary: TrainSummary, regis_tags: ModelRegisTags, mlf_model: MLFlowModel,
+    mlf_cfg: MLFlowConf, finished_only: bool = True
 ) -> str:
     if not (summary.run_id or summary.model_uri):
         raise ValueError('Run id or model URI can\'t be empty')
@@ -99,17 +97,18 @@ def register_model(
             f'run id "{summary.run_id}"'
         )
 
+    # Tags to add when registering the model
+    regis_tags.model_registered_at = regis_tags.datetime_now()
+    regis_tags.train_data_commit_id = summary.data_commit_id
+
     # MLFlow will print the details after this
     print('Preparing to register the model')
+
     # Register the best model from the last run
     status = mlflow.register_model(
         summary.model_uri,
-        mlf_model.model_registry_name,
-        tags = {
-            # NOTE: Check the evaluation script for possible tag conflicts
-            'model_registered_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'train_data_commit_id': summary.data_commit_id
-        }
+        name = mlf_model.model_registry_name,
+        tags = regis_tags.model_dump()
     )
 
     # By default, the version will be incremental number
@@ -119,7 +118,7 @@ def register_model(
 @flow
 def run(
     data_source_repo: str, data_source_creds: LakeFSConf, train_params: TrainParams,
-    train_tags: TrainTags, model_registry: MLFlowModel, mlflow_creds: MLFlowConf
+    regis_tags: ModelRegisTags, model_registry: MLFlowModel, mlflow_creds: MLFlowConf
 ) -> str:
     # Get the latest data commit id from lakeFS repo
     commit_id = get_data_commit_id(data_source_repo, data_source_creds)
@@ -132,11 +131,11 @@ def run(
     train_params.img_dir = data_source_repo + '/images'
 
     train_summary = model_training(
-        train_params, train_tags, data_source_creds.as_s3(), mlflow_creds
+        train_params, data_source_creds.as_s3(), mlflow_creds
     )
 
     version = register_model(
-        train_summary, model_registry, mlflow_creds, finished_only = True
+        train_summary, regis_tags, model_registry, mlflow_creds, finished_only = True
     )
 
     return version
@@ -161,26 +160,15 @@ if __name__ == '__main__':
         data_source_creds: LakeFSConf = Field(default_factory = LakeFSConf)
 
         train_params: TrainParams = Field(default_factory = TrainParams)
-        train_tags: TrainTags = Field(default_factory = TrainTags)
+        regis_tags: ModelRegisTags = Field(default_factory = ModelRegisTags)
 
         model_registry: MLFlowModel = Field(default_factory = MLFlowModel)
         mlflow_creds: MLFlowConf = Field(default_factory = MLFlowConf)
-
-        @field_validator('train_tags', mode = 'after')
-        @classmethod
-        def check_default_tags(cls, value: TrainTags):
-            if value == TrainTags():
-                warnings.warn(
-                    f'Using default author name ({value.author}) and other tags as '
-                    'MLFLow run tags. You may want to review/change this later'
-                )
-
-            return value
 
     args = ParseArgs()
 
     run(
         args.data_source_repo, args.data_source_creds,
-        args.train_params, args.train_tags,
+        args.train_params, args.regis_tags,
         args.model_registry, args.mlflow_creds
     )

@@ -7,11 +7,6 @@ from src._pydantic.common import LakeFSConf, S3Conf
 from src._pydantic.train_test import TrainParams, TestParams, MLFlowModel
 
 
-dotenv.load_dotenv(
-    '.env.prod' if Path('.env.prod').exists()
-    else '.env.dev'
-)
-
 class ParameterTesting(unittest.TestCase):
     def test_train_params(self):
         batch_size = 999
@@ -40,12 +35,31 @@ class ParameterTesting(unittest.TestCase):
 
         lakefs_cfg = LakeFSConf()
         assert lakefs_cfg.username == secret_id
-    
+
     def test_s3_config(self):
-        lakefs_cfg = LakeFSConf()
-        s3_cfg = lakefs_cfg.as_s3()
-        assert lakefs_cfg.host == s3_cfg.endpoint_url
+        true_secret_key = 'truesecretkey'
+        false_secret_key = 'falsesecretkey'
+        os.environ['AWS_SECRET_ACCESS_KEY'] = false_secret_key
+
+        s3_cfg = S3Conf(
+            endpoint_url = 'http://localhost:9000',
+            aws_access_key_id = 'mysecretid',
+            aws_secret_access_key = true_secret_key
+        )
+
+        key_direct = s3_cfg.aws_secret_access_key
+        key_dump = s3_cfg.model_dump()['aws_secret_access_key']
+
+        # This may fail depending on the Pydantic settings
+        # Hence I'm checking if we're using the correct settings
+        assert key_direct == key_dump
+        assert key_direct == true_secret_key
 
 
 if __name__ == '__main__':
+    dotenv.load_dotenv(
+        '.env.prod' if Path('.env.prod').exists()
+        else '.env.dev'
+    )
+
     unittest.main()

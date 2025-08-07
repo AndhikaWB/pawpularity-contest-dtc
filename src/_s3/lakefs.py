@@ -87,7 +87,7 @@ def get_exact_commit(
         Any: The commit id, or `Commit` object, or None if the commit can't be found
     """
 
-    client = lakefs.Client(**dict(lfs_cfg))
+    client = lakefs.Client(**lfs_cfg.model_dump())
 
     # Extract the branch name or commit id from the full S3 path
     # E.g. s3://my-repo/main or s3://my-repo/64675c312d48be7e
@@ -120,7 +120,7 @@ def commit_branch(
         str: Commit id of the pushed commit.
     """
 
-    client = lakefs.Client(**dict(lfs_cfg))
+    client = lakefs.Client(**lfs_cfg.model_dump())
     repo = lakefs.Repository(repo_id, client = client)
 
     commit = repo.branch(branch).commit(message = message)

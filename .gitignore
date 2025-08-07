@@ -4,9 +4,10 @@ __pycache__/
 # Data folder
 /data/*
 !/data/raw/data.csv
+!/data/raw/images/.gitkeep
 
-# Temporary folders
-/model/*
+# Temporary folder
+/model
 
 # Docker shared volumes
 /docker/*

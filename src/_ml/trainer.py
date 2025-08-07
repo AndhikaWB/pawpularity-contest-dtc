@@ -14,7 +14,7 @@ import torchmetrics as tm
 
 from _pydantic.common import MLFlowConf
 from _ml.utils import LossMetric, EarlyStopping, QSave
-from _pydantic.train_test import TrainParams, TrainTags, TrainSummary
+from _pydantic.train_test import TrainParams, TrainSummary
 
 
 class Trainer:
@@ -51,7 +51,7 @@ class Trainer:
         params.monitor = 'val_bce'
         params.monitor_min = True
 
-        print('MLFlow parameters:', dict(params))
+        print('MLFlow parameters:', params.model_dump())
 
         # ----------
 
@@ -107,9 +107,7 @@ class Trainer:
             schema = column_schemas
         )
 
-    def start_training(
-        self, params: TrainParams, tags: TrainTags, mlf_cfg: MLFlowConf
-    ) -> str:
+    def start_training(self, params: TrainParams, mlf_cfg: MLFlowConf) -> str:
         mlf_cfg.expose_auth_to_env()
         mlflow.set_tracking_uri(mlf_cfg.tracking_uri)
         mlflow.set_experiment(mlf_cfg.experiment_name)
@@ -125,8 +123,7 @@ class Trainer:
             metadata = self.get_input_metadata(params)
 
             # Log things that won't change
-            mlflow.set_tags(dict(tags))
-            mlflow.log_params(dict(params))
+            mlflow.log_params(params.model_dump())
             mlflow.log_input(metadata, context = params.context)
             print(f'Started run {run.info.run_name} ({run.info.run_id})')
 
@@ -264,10 +261,10 @@ class Trainer:
             experiment_ids = [ experiment_id ],
             filter_string = f'source_run_id = \'{run_id}\'',
             order_by = [
-                dict(
-                    field_name = f'metrics.{params.monitor}',
-                    ascending = True if params.monitor_min else False
-                )
+                {
+                    'field_name': f'metrics.{params.monitor}',
+                    'ascending': True if params.monitor_min else False
+                }
             ]
         )
 

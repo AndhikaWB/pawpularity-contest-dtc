@@ -1,5 +1,6 @@
 import tempfile
 import polars as pl
+import warnings
 
 import torch
 from lightning import Fabric
@@ -9,6 +10,7 @@ import mlflow
 from mlflow.data.pandas_dataset import PandasDataset
 from mlflow.data.http_dataset_source import HTTPDatasetSource
 from mlflow.models.evaluation import EvaluationResult
+from mlflow.exceptions import MlflowException
 
 from _pydantic.train_test import TestParams, TestSummary
 from _pydantic.common import MLFlowConf, S3Conf
@@ -25,9 +27,14 @@ class Tester:
         self.model_id = model_id
 
         # Try to get the model id manually if possible
-        # This is optional by nice to have for tracking purpose
+        # This is optional but nice to have for tracking later
         if not model_id and model_uri.startswith('models:/'):
             self.model_id = model_uri[len('models:/'):]
+        else:
+            warnings.warn(
+                'Model id is not provided and can\'t be extracted, '
+                'but this is useful for tracking purpose later'
+            )
 
     def predict(
         self, params: TestParams, mlf_cfg: MLFlowConf, s3_cfg: S3Conf
@@ -38,7 +45,7 @@ class Tester:
         # Assume the test file is always located on S3
         df = pl.scan_csv(
             params.csv_dir + '/test.csv',
-            storage_options = dict(s3_cfg)
+            storage_options = s3_cfg.model_dump()
         ).collect()
 
         # Cache dir for storing downloaded files
@@ -102,7 +109,7 @@ class Tester:
             # The saved file can be loaded for drift monitoring purpose later
             mlflow.log_table(df.to_pandas(), 'prediction.json')
             # Also log the params, just like when training
-            mlflow.log_params(dict(params))
+            mlflow.log_params(params.model_dump())
 
             result = mlflow.evaluate(
                 data = dataset,
@@ -127,12 +134,46 @@ class Tester:
         )
 
     @staticmethod
-    def load_prediction(
-        run_id: str, mlf_cfg: MLFlowConf, artifact_path: str = 'prediction.json'
-    ) -> pl.DataFrame:
+    def search_evaluation(
+        ref_commit_id: str, summary: TestSummary, mlf_cfg: MLFlowConf
+    ) -> str | None:
         mlf_cfg.expose_auth_to_env()
         mlflow.set_tracking_uri(mlf_cfg.tracking_uri)
 
-        # Assumed to be logged when during the evaluation run
-        df = mlflow.load_table(artifact_path, run_ids = [run_id])
+        # Find existing evaluation run with a specific commit id
+        logged_runs = mlflow.search_runs(
+            experiment_names = [mlf_cfg.experiment_name],
+            filter_string = 'params.context = \'testing\' AND '
+                f'params.data_commit_id = \'{ref_commit_id}\' AND '
+                f'params.metric = \'{summary.metric}\'',
+            order_by = [
+                f'metrics.{summary.metric} {'ASC' if summary.metric_min else 'DESC'}'
+            ],
+            output_format = 'list'
+        )
+
+        if logged_runs:
+            # Return the run id that has the best metric result
+            return logged_runs[0].info.run_id
+
+        return None
+
+    @staticmethod
+    def load_prediction(
+        run_id: str, mlf_cfg: MLFlowConf, artifact_path: str = 'prediction.json',
+        error_ok: bool = False
+    ) -> pl.DataFrame | None:
+        if error_ok and not run_id:
+            return None
+
+        mlf_cfg.expose_auth_to_env()
+        mlflow.set_tracking_uri(mlf_cfg.tracking_uri)
+
+        try:
+            # Assumed to be logged when running the evaluation run
+            df = mlflow.load_table(artifact_path, run_ids = [run_id])
+        except MlflowException as err:
+            if error_ok and err.error_code == 'RESOURCE_DOES_NOT_EXIST':
+                return None
+
         return pl.from_pandas(df)

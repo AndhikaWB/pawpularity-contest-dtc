@@ -21,7 +21,7 @@ def download_dir(remote_dir: str, local_dir: str, s3_cfg: S3Conf, replace: bool 
 
     # Get the bucket name and the directory after the bucket
     bucket, remote_dir = get_bucket_key(remote_dir)
-    s3 = boto3.resource('s3', **dict(s3_cfg))
+    s3 = boto3.resource('s3', **s3_cfg.model_dump())
     bucket = s3.Bucket(bucket)
 
     with futures.ThreadPoolExecutor() as exec:
@@ -69,7 +69,7 @@ def upload_dir(local_dir: str, remote_dir: str, s3_cfg: S3Conf, replace: bool = 
 
     # Get the bucket name and the directory after the bucket
     bucket, remote_dir = get_bucket_key(remote_dir)
-    s3 = boto3.resource('s3', **dict(s3_cfg))
+    s3 = boto3.resource('s3', **s3_cfg.model_dump())
     bucket = s3.Bucket(bucket)
 
     # Nested function (closure) for faster operation later

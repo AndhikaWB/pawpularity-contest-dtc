@@ -1,18 +1,16 @@
 import mlflow
 import dotenv
-import warnings
 import polars as pl
 from pathlib import Path
 from datetime import datetime
 
-from pydantic import Field, field_validator
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from _s3.lakefs import get_exact_commit, replace_branch
 from _pydantic.common import LakeFSConf, MLFlowConf, S3Conf
-from _pydantic.train_test import (
-    TestParams, TestSummary, TrainParams, TrainTags, MLFlowModel
-)
+from _pydantic.train_test import TrainParams, TestParams, TestSummary, MLFlowModel
+from _pydantic.train_test import ModelRegisTags, ModelBestTags
 
 from _ml.tester import Tester
 from _ml.utils import MetricTester
@@ -115,7 +113,7 @@ def set_best_model_version(
     mlflow.set_tracking_uri(mlf_cfg.tracking_uri)
     client = mlflow.MlflowClient()
 
-    print('Setting the best model version alias')
+    print('Setting version alias for the best model')
 
     client.set_registered_model_alias(
         mlf_model.model_registry_name,
@@ -123,11 +121,11 @@ def set_best_model_version(
         summary.model_version
     )
 
-    tags = {
-        # NOTE: Check the training script for possible tag conflicts
-        'model_marked_best_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'test_data_commit_id': summary.data_commit_id
-    }
+    # Tags to add to the best model
+    tags = ModelBestTags(
+        model_marked_best_at = ModelBestTags.datetime_now(),
+        test_data_commit_id = summary.data_commit_id
+    ).model_dump()
 
     for key, val in tags.items():
         client.set_model_version_tag(
@@ -158,16 +156,18 @@ def generate_report(
     print(f'* Current commit id = {summary.data_commit_id}')
     print(f'* Reference commit id = {ref_commit_id}')
 
-    # Get current and reference data to initiate the report
-    # Without both data we can't calculate the data drift
-    cur_df = Tester.load_prediction(summary.run_id, mlf_cfg)
-    reporter = Reporter(summary.data_commit_id, cur_df)
-    ref_df = reporter.get_reference_dataframe(ref_commit_id, summary, mlf_cfg)
+    # Pass info about the current data and evaluation result
+    cur_df = Tester.load_prediction(summary.run_id, mlf_cfg, error_ok = False)
+    reporter = Reporter(summary, cur_df)
+
+    # Also get the reference evaluation data (for drift comparison)
+    # This assumes that it uses the same metric as the current data
+    ref_run_id = Tester.search_evaluation(ref_commit_id, summary, mlf_cfg)
+    ref_df = Tester.load_prediction(ref_run_id, mlf_cfg, error_ok = True)
 
     if type(ref_df) == pl.DataFrame:
-        # Write the drift report and save it to database
-        # To be used by Grafana or whatever tools later
-        report_df = reporter.generate_report(ref_commit_id, ref_df, summary)
+        # Generate the drift report and write it to a database
+        report_df = reporter.generate_report(ref_run_id, ref_commit_id, ref_df, summary)
         reporter.write_report_to_db(report_df, table_name, report_cfg)
         print(f'Written report to database table "{table_name}"')
         return True
@@ -178,7 +178,7 @@ def generate_report(
 @flow
 def run(
     data_source_repo: str, data_source_creds: LakeFSConf, train_params: TrainParams,
-    train_tags: TrainTags, model_registry: MLFlowModel, mlflow_creds: MLFlowConf,
+    regis_tags: ModelRegisTags, model_registry: MLFlowModel, mlflow_creds: MLFlowConf,
     report_creds: ReportConf
 ):
     # Get the latest data commit id from lakeFS repo
@@ -213,7 +213,7 @@ def run(
     if not cur_model or not metric.is_safe(cur_summary.score):
         new_model = training_run(
             data_source_repo, data_source_creds,
-            train_params, train_tags,
+            train_params, regis_tags,
             model_registry, mlflow_creds
         )
 
@@ -269,29 +269,18 @@ if __name__ == '__main__':
         data_source_creds: LakeFSConf = Field(default_factory = LakeFSConf)
 
         train_params: TrainParams = Field(default_factory = TrainParams)
-        train_tags: TrainTags = Field(default_factory = TrainTags)
+        regis_tags: ModelRegisTags = Field(default_factory = ModelRegisTags)
 
         model_registry: MLFlowModel = Field(default_factory = MLFlowModel)
         mlflow_creds: MLFlowConf = Field(default_factory = MLFlowConf)
 
         report_creds: ReportConf = Field(default_factory = ReportConf)
 
-        @field_validator('train_tags', mode = 'after')
-        @classmethod
-        def check_default_tags(cls, value: TrainTags):
-            if value == TrainTags():
-                warnings.warn(
-                    f'Using default author name ({value.author}) and other tags as '
-                    'MLFLow run tags. You may want to review/change this later'
-                )
-
-            return value
-
     args = ParseArgs()
 
     run(
         args.data_source_repo, args.data_source_creds,
-        args.train_params, args.train_tags,
+        args.train_params, args.regis_tags,
         args.model_registry, args.mlflow_creds,
         args.report_creds
     )
