@@ -18,6 +18,8 @@ from _pydantic.train_test import TrainParams, TrainSummary
 
 
 class Trainer:
+    """Helper class to train a new MLFlow model (for predicting pet pawpularity)."""
+
     def __init__(
         self, model: nn.Module, train_loader: DataLoader, val_loader: DataLoader
     ):
@@ -80,7 +82,7 @@ class Trainer:
         df = getattr(self.train_loader.dataset, 'df', None)
         column_schemas = None
 
-        if type(df) == pl.DataFrame:
+        if isinstance(df, pl.DataFrame):
             column_specs = []
 
             for i in range(len(df.columns)):

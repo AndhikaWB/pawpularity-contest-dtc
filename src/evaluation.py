@@ -24,7 +24,7 @@ from prefect import flow, task
 @task
 def get_data_commit_id(
     data_source_repo: str, lfs_cfg: LakeFSConf, check_date: bool = False
-) -> str | tuple[str, str]:
+) -> str:
     commit = get_exact_commit(data_source_repo, lfs_cfg, return_id = False)
     if not commit:
         raise RuntimeError(f'Can\'t get latest commit from "{data_source_repo}"')
@@ -55,7 +55,7 @@ def get_best_model_version(mlf_model: MLFlowModel, mlf_cfg: MLFlowConf) -> str |
         # Try getting the best model using a version alias
         version = client.get_model_version_by_alias(
             mlf_model.model_registry_name,
-            alias = mlf_model.best_version_alias
+            alias = alias
         ).version
     except mlflow.exceptions.RestException as err:
         # If there's no version under that alias
@@ -165,7 +165,7 @@ def generate_report(
     ref_run_id = Tester.search_evaluation(ref_commit_id, summary, mlf_cfg)
     ref_df = Tester.load_prediction(ref_run_id, mlf_cfg, error_ok = True)
 
-    if type(ref_df) == pl.DataFrame:
+    if isinstance(ref_df, pl.DataFrame):
         # Generate the drift report and write it to a database
         report_df = reporter.generate_report(ref_run_id, ref_commit_id, ref_df, summary)
         reporter.write_report_to_db(report_df, table_name, report_cfg)

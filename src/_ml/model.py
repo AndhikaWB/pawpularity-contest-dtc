@@ -78,7 +78,8 @@ class PawDataset(Dataset):
         image = self.__decode_image(img_path)
 
         # Target (must be 2D even if only 1 column)
-        target = None
+        # If there's no target, return an empty list instead
+        target = []
         if 'Pawpularity' in self.df.columns:
             target = self.df.select(pl.col('Pawpularity') / 100)
             target = target.to_torch()[index]
@@ -93,7 +94,7 @@ class PawDataset(Dataset):
         if self.transform:
             image = self.transform(image)
             features = self.transform(features)
-            target = None if not target else self.transform(target)
+            target = [] if not target else self.transform(target)
 
         # Return dict instead of tuple for clarity
         return {
@@ -108,7 +109,8 @@ class PawDataLoader:
     functions and other necessities for `PawDataset`.
 
     Args:
-        csv_path (str): The CSV file containing metadata of the images.
+        csv_path (str | pl.DataFrame): The CSV file containing features of the images,
+            or a Polars `DataFrame` object.
         img_dir (str): Directory to look up for the image files.
         is_train_data (bool): Whether to apply extra transformations intended for train
             data only.
@@ -173,7 +175,7 @@ class PawDataLoader:
     @classmethod
     def __get_dataframe(cls) -> pl.DataFrame:
         # If already a dataframe, no need to do anything
-        if type(cls.csv_path) == pl.DataFrame:
+        if isinstance(cls.csv_path, pl.DataFrame):
             return cls.csv_path
 
         # Source the CSV file from S3 when provided

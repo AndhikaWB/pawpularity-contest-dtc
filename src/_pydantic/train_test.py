@@ -44,7 +44,8 @@ class MLFlowModel(BaseSettings):
 
 class TestParams(BaseSettings):
     """Parameters that will be used to configure the testing process, and logged to
-    MLFlow when starting an evaluation run.
+    MLFlow when starting an evaluation run. Can also be used as parameters when serving
+    the model.
     """
 
     model_config = SettingsConfigDict(validate_by_name = True, validate_default = False, extra = 'allow')
@@ -160,7 +161,9 @@ class ModelRegisTags(BaseModel):
 
     @staticmethod
     def datetime_now() -> str:
-        """Get the current date and time as string."""
+        """Get the current date and time as string (MLFlow may reject tag value other
+        than string).
+        """
 
         return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -175,6 +178,8 @@ class ModelBestTags(BaseModel):
 
     @staticmethod
     def datetime_now() -> str:
-        """Get the current date and time as string."""
+        """Get the current date and time as string (MLFlow may reject tag value other
+        than string).
+        """
 
         return datetime.now().strftime('%Y-%m-%d %H:%M:%S')

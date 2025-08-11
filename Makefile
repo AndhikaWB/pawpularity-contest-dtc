@@ -1,4 +1,4 @@
-.PHONY: setup preprocess train evaluate predict compose compose_down
+.PHONY: setup preprocess training evaluation serving webapp compose compose_down
 .ONESHELL:
 
 setup:
@@ -9,17 +9,21 @@ preprocess:
 	conda activate pytorch
 	python src/preprocess.py
 
-train:
+training:
 	conda activate pytorch
 	python src/training.py
 
-evaluate:
+evaluation:
 	conda activate pytorch
 	python src/evaluation.py
 
-predict:
+serving:
 	conda activate pytorch
-	python src/prediction.py
+	python src/serving.py
+
+webapp:
+	conda activate pytorch
+	streamlit run src/webapp.py
 
 compose:
 	cd docker

@@ -123,7 +123,7 @@ class QSave:
     @staticmethod
     def save(obj: dict | str, path: str) -> None:
         with open(path, 'w') as f:
-            if type(obj) is dict:
+            if isinstance(obj, dict):
                 json.dump(obj, f, indent = 2)
             else:
                 f.write(obj)

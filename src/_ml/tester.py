@@ -17,6 +17,11 @@ from _pydantic.common import MLFlowConf, S3Conf
 
 
 class Tester:
+    """Helper class for testing/evaluating a registered MLFlow model. It will log the
+    model prediction result as MLFlow artifact as part of the process, which can be used
+    for drift monitoring purpose later.
+    """
+
     def __init__(
         self, model_name: str, model_version: str, model_uri: str,
         model_id: str | None = None
@@ -118,8 +123,8 @@ class Tester:
             )
 
             # HACK: Type hint for the evaluation result
-            if type(result) == EvaluationResult:
-                result = result
+            if isinstance(result, EvaluationResult):
+                pass
 
         return TestSummary(
             run_id = result.run_id,

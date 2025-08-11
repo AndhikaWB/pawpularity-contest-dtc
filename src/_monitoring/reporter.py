@@ -9,6 +9,11 @@ from _pydantic.train_test import TestSummary
 from _pydantic.report import ReportSchema, ReportConf
 
 class Reporter:
+    """Helper class for generating drift report between current and reference data (both
+    data can be loaded from the existing evaluation runs). The generated report can also
+    be uploaded to database later.
+    """
+
     def __init__(self, summary: TestSummary, df: pl.DataFrame):
         self.cur_df = df
         self.cur_run_id = summary.run_id
@@ -65,7 +70,7 @@ class Reporter:
                 uploaded to a database later.
         """
 
-        if type(ref_df) != pl.DataFrame or not ref_commit_id:
+        if not isinstance(ref_df, pl.DataFrame) or not ref_commit_id:
             raise ValueError('Reference data or commit id can\'t be empty')
 
         # Disable NannyML analytics

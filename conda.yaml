@@ -24,4 +24,5 @@ dependencies:
   - psycopg2==2.9.10
   - fastapi==0.115.12
   - python-multipart==0.0.20
+  - streamlit==1.48.0
   - prefect==3.4.6

@@ -78,7 +78,7 @@ def preproc_data(
 @task
 def purge_remote_data(remote_dir: str, s3_cfg: S3Conf):
     bucket, target_dir = get_bucket_key(remote_dir)
-    s3 = boto3.resource('s3', **dict(s3_cfg))
+    s3 = boto3.resource('s3', **s3_cfg.model_dump())
     bucket = s3.Bucket(bucket)
 
     print(f'Purging data on "{remote_dir}"')
