@@ -18,7 +18,9 @@ from _pydantic.train_test import TrainParams, TrainSummary
 
 
 class Trainer:
-    """Helper class to train a new MLFlow model (for predicting pet pawpularity)."""
+    """Helper class to train a new PyTorch model for predicting pet pawpularity. It
+    utilizes MLFlow to track the training process and log the training result.
+    """
 
     def __init__(
         self, model: nn.Module, train_loader: DataLoader, val_loader: DataLoader

@@ -115,7 +115,7 @@ def register_model(
     # However, the returned type will always be string
     return status.version
 
-@flow
+@flow(name = 'Model Training')
 def run(
     data_source_repo: str, data_source_creds: LakeFSConf, train_params: TrainParams,
     regis_tags: ModelRegisTags, model_registry: MLFlowModel, mlflow_creds: MLFlowConf

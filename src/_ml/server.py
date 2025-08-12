@@ -13,8 +13,9 @@ from _pydantic.serve import ServeRequest, ServeResponse, ModelInfo
 
 
 class Server:
-    """Helper class to easily load the best model from MLFlow, and use it for predicting
-    pet pawpularity. The loaded model can be served via FastAPI (or similar libraries).
+    """Helper class to easily load the best model from MLFlow, which then can be used
+    for predicting pet pawpularity. The loaded model can be served via FastAPI or
+    similar libraries.
     """
 
     def __init__(self, params: TestParams, mlf_model: MLFlowModel, mlf_cfg: MLFlowConf):
@@ -22,10 +23,8 @@ class Server:
         self.params = params
         # Directory for storing uploaded images
         self.img_dir = tempfile.TemporaryDirectory()
-
-        # Load the model automatically when initializing this class
-        self.model_info = self.__get_best_model_version(mlf_model, mlf_cfg)
-        self.model = self.__load_model(self.model_info.source, mlf_cfg)
+        # Load the model automatically
+        self.reload(mlf_model, mlf_cfg)
 
     def __get_best_model_version(
         self, mlf_model: MLFlowModel, mlf_cfg: MLFlowConf
@@ -63,6 +62,15 @@ class Server:
 
         return model
 
+    def reload(self, mlf_model: MLFlowModel, mlf_cfg: MLFlowConf):
+        """Reload the served model using an optimistic approach (by assuming no error
+        will ever occur).
+        """
+
+        # There might be a very little downtime when switching the model here
+        self.model_info = self.__get_best_model_version(mlf_model, mlf_cfg)
+        self.model = self.__load_model(self.model_info.source, mlf_cfg)
+
     def predict(self, req: ServeRequest) -> ServeResponse:
         # Save the uploaded image in a directory
         file_name = uuid.uuid4().hex
@@ -70,9 +78,9 @@ class Server:
             f.write(req.image)
 
         # Dump the image features as dataframe
-        df = pl.DataFrame([ req.model_dump(by_alias = True, exclude = 'image')])
+        df = pl.DataFrame([ req.dump_form() ])
         df.insert_column(0, pl.Series('Id', [file_name]))
-    
+
         loader = PawDataLoader(
             df,
             img_dir = self.img_dir.name,

@@ -1,3 +1,4 @@
+import os
 import io
 from PIL import Image
 import streamlit as st
@@ -6,15 +7,19 @@ import requests
 from _pydantic.serve import ServeRequest, ServeResponse
 
 
+model_endpoint = os.getenv('SERVE_MODEL_ENDPOINT')
+if not model_endpoint:
+    model_endpoint = 'http://localhost:8765/predict'
+
 features = [
-    # Get all features except the image
+    # Get all feature fields except the image
     ServeRequest.model_fields[key].alias
     for key in ServeRequest.model_fields
     if ServeRequest.model_fields[key].alias != 'Image'
 ]
 
 features_desc = [
-    # Get all feature descriptions
+    # Get all feature field descriptions
     ServeRequest.model_fields[key].description
     for key in ServeRequest.model_fields
     if ServeRequest.model_fields[key].alias != 'Image'
@@ -33,6 +38,8 @@ if img_uploaded:
     img_uploaded = Image.open(img_uploaded)
     img_uploaded = img_uploaded.convert('RGB')
 
+    # The Kaggle dataset I used for training only have JPG files
+    # So currently, my code is hardcoded to only look for JPG file
     img_bytes = io.BytesIO()
     img_uploaded.save(img_bytes, 'JPEG')
 
@@ -66,7 +73,7 @@ predict = st.button(
 if predict and img_uploaded:
     with st.spinner('Retrieving Prediction...', show_time = True):
         response = requests.post(
-            'http://127.0.0.1:8765/predict',
+            model_endpoint,
             # This must match the schema provided in the backend (FastAPI)
             data = {features[i]: True for i in features_selected},
             files = {'Image': img_bytes.getvalue()}

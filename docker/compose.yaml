@@ -45,7 +45,7 @@ services:
 
   awscli:
     <<: *mlops-common
-    image: amazon/aws-cli:2.23.15
+    image: amazon/aws-cli:2.27.35
     depends_on:
       juicefs:
         condition: service_healthy
@@ -63,7 +63,7 @@ services:
         fi
 
   mlflow:
-    image: ghcr.io/mlflow/mlflow:v3.1.4
+    image: ghcr.io/mlflow/mlflow:v3.2.0
     environment:
       <<: *mlops-common-env
       # We should actually use separate secret key, I'm just lazy
@@ -107,7 +107,7 @@ services:
     restart: unless-stopped
 
   postgres:
-    image: postgres:14.18
+    image: postgres:17.5
     environment:
       POSTGRES_USER: ${_POSTGRES_ADMIN_USERNAME}
       POSTGRES_PASSWORD: ${_POSTGRES_ADMIN_PASSWORD}

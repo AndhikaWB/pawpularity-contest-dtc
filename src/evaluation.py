@@ -175,7 +175,7 @@ def generate_report(
     print('Can\'t find reference data, no report generated')
     return False
 
-@flow
+@flow(name = 'Model Evaluation')
 def run(
     data_source_repo: str, data_source_creds: LakeFSConf, train_params: TrainParams,
     regis_tags: ModelRegisTags, model_registry: MLFlowModel, mlflow_creds: MLFlowConf,

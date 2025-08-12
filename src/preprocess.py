@@ -113,7 +113,7 @@ def commit_data(repo_id: str, branch: str, lfs_cfg: LakeFSConf) -> str:
     print(f'Saved changes as commit id "{commit_id}"')
     return commit_id
 
-@flow
+@flow(name = 'Preprocess Data')
 def run(
     source_dir: str, target_dir: str, source_creds: S3Conf | None,
     target_creds: LakeFSConf, seed: int

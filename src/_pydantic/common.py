@@ -35,7 +35,7 @@ class ValidOrNone:
 
 class S3Conf(BaseSettings):
     # BUG: If both params and env variables exist, the final value may be inconsistent
-    # You should check this by comparing "my_var.key" with "my_var.model_dump()[key]"
+    # We should check this by comparing "my_var.key" with "my_var.model_dump()[key]"
     model_config = SettingsConfigDict(validate_by_name = True, validate_by_alias = False, extra = 'allow')
     
     endpoint_url: Annotated[str, Field(alias = 'AWS_ENDPOINT_URL')] = 'http://localhost:9000'

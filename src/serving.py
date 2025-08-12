@@ -28,6 +28,11 @@ app = FastAPI()
 async def predict(req: Annotated[ServeRequest, Form(), File()]) -> ServeResponse:
     return model.predict(req)
 
+@app.get('/reload')
+async def reload():
+    model.reload(model_registry, mlflow_creds)
+    return {'detail': 'OK'}
+
 @app.get('/')
 async def main() -> HTMLResponse:
     html_content = """

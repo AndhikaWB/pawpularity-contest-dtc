@@ -17,9 +17,9 @@ from _pydantic.common import MLFlowConf, S3Conf
 
 
 class Tester:
-    """Helper class for testing/evaluating a registered MLFlow model. It will log the
-    model prediction result as MLFlow artifact as part of the process, which can be used
-    for drift monitoring purpose later.
+    """Helper class for testing/evaluating a registered MLFlow model. It will save the
+    evaluation data as MLFlow artifact, which can also be used for drift monitoring
+    purpose later.
     """
 
     def __init__(
@@ -94,6 +94,10 @@ class Tester:
     def run_evaluation(
         self, df: pl.DataFrame, params: TestParams, mlf_cfg: MLFlowConf
     ) -> TestSummary:
+        """Run an evaluation for the model (via MLFlow) and log the model prediction
+        result as an MLFlow artifact.
+        """
+
         mlf_cfg.expose_auth_to_env()
         mlflow.set_tracking_uri(mlf_cfg.tracking_uri)
         mlflow.set_experiment(mlf_cfg.experiment_name)
@@ -142,6 +146,12 @@ class Tester:
     def search_evaluation(
         ref_commit_id: str, summary: TestSummary, mlf_cfg: MLFlowConf
     ) -> str | None:
+        """Search an existing evaluation run which match a certain criteria, such as
+        the name of the metric used, and the specific commit id. If there are multiple
+        runs that matches the criteria, only the run id with the best metric score will
+        be returned.
+        """
+
         mlf_cfg.expose_auth_to_env()
         mlflow.set_tracking_uri(mlf_cfg.tracking_uri)
 
@@ -168,6 +178,11 @@ class Tester:
         run_id: str, mlf_cfg: MLFlowConf, artifact_path: str = 'prediction.json',
         error_ok: bool = False
     ) -> pl.DataFrame | None:
+        """Load the prediction result from an existing evaluation run, assuming the run
+        id is already known beforehand. This is preferred over re-running the same
+        evaluation again, which can be expensive and slow depending on the model.
+        """
+
         if error_ok and not run_id:
             return None
 
