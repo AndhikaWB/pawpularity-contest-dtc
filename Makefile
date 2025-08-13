@@ -1,35 +1,30 @@
-.PHONY: setup preprocess training evaluation serving webapp compose compose_down
+.PHONY: setup preprocess training evaluation serving webapp compose compose-down
 .ONESHELL:
 
 setup:
-	conda env create -f conda.yaml
-	conda activate pytorch
+	uv sync
 
 preprocess:
-	conda activate pytorch
-	python src/preprocess.py
+	uv run src/preprocess.py
 
 training:
-	conda activate pytorch
-	python src/training.py
+	uv run  src/training.py
 
 evaluation:
-	conda activate pytorch
-	python src/evaluation.py
+	uv run  src/evaluation.py
 
 serving:
-	conda activate pytorch
-	python src/serving.py
+	uv run  src/serving.py
 
 webapp:
-	conda activate pytorch
+	source "$(CURDIR)/.venv/Scripts/activate"
 	streamlit run src/webapp.py
 
 compose:
 	cd docker
 	docker compose --env-file .env.dev up
 
-compose_down:
+compose-down:
 	cd docker
 	rm -rf home
 	rm -rf var

@@ -4,7 +4,7 @@ Ever wondered how cute your pet is compared to other people's pet? Say no more! 
 
 The original goal if this project is to ease the process of pet adoption, by using the ML model, volunteers can take the best possible photo of their pet, and receive feedback from the model so they can change the pose, etc. to increase the pawpularity score. 
 
-However, this feedback based solution is currently not completed yet (especially the embedding and embedding store part), so only the pawpularity score will be outputted for now.
+However, this feedback based solution is currently not completed yet (especially the embedding and vector store part), so only the pawpularity score will be outputted for now.
 
 ## Data Availability
 
@@ -37,14 +37,16 @@ However, the original CSV is already included in this repo, and has been renamed
 
 ### First Time Setup
 
-1. Install [Conda](https://anaconda.org/anaconda/conda) dependencies by running `make setup`
-    - This will install the CUDA version of PyTorch, which is significantly faster than the CPU version, but may hang if you don't have Nvidia GPU
-    - You can delete the `cuXXX` part on the `conda.yaml` to try the default CPU version of PyTorch. However, this will be incredibly slow for image processing, and I can't guarantee if the same exact version exists on PyPI or not
+1. Please install [uv](https://docs.astral.sh/uv/) first, then run `make setup` to let uv manage the Python package dependencies
+    - Unlike pip or Conda, uv keeps a detailed info of every package dependencies, ensuring maximum reproducibility
+    - A virtual environment (`.venv`) will also be created on the root of this project. Currently, uv doesn't support [centralized environment](https://github.com/astral-sh/uv/issues/6612) yet
+    - I use the CUDA version of PyTorch by default, which is significantly faster than the CPU version, but will not work without an Nvidia GPU
+    - You can delete the `[tool.uv.sources]` section on the `pyproject.toml` to try the CPU version of PyTorch. However, I can't guarantee if the identical CPU version exists on PyPI or not
 2. Prepare and run Docker compose using `make compose`
     - If it's your first time, Docker will download the required image files first (this may take a while)
     - Once everything is done and the services are being run, wait a bit more until all the services are truly ready (30 seconds should do)
 3. The Docker compose already has everything pre-configured, except for lakeFS
-    - Visit [lakeFS setup](http://localhost:8000/setup) URL to generate username and password
+    - Visit [lakeFS setup](http://localhost:8000/setup) URL to generate the username and password
     - Copy the username and password to `.env.dev` file
     - [Login](http://localhost:8000/auth/login) to lakeFS with that username and password
     - Create a new repo with this settings:

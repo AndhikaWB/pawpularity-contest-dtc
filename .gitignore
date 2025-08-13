@@ -1,5 +1,6 @@
 # Junk folders
 __pycache__/
+/.venv/
 
 # Data folder
 /data/*
@@ -7,7 +8,7 @@ __pycache__/
 !/data/raw/images/.gitkeep
 
 # Temporary folder
-/model
+/model/
 
 # Docker shared volumes
 /docker/*

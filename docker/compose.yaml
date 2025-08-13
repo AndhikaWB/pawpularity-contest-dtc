@@ -89,7 +89,7 @@ services:
           pip install mlflow[auth] --no-cache-dir
 
           echo "Installing Python boto3 dependency..."
-          pip install boto3==1.38.44 --no-cache-dir
+          pip install boto3==1.39.11 --no-cache-dir
 
           echo "Starting MLFlow UI server..."
           mlflow ui -h 0.0.0.0 -p 5000 \

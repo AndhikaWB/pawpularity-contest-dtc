@@ -5,6 +5,6 @@ indent-width = 4
 indent-style = "space"
 
 [lint]
-# Line length warning, use pathlib when possible
+# Line length warning and enforce pathlib usage
 select = ["E501", "W505", "PTH"]
 ignore = ["PTH123"]
