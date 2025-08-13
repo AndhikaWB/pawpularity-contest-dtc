@@ -3,8 +3,8 @@ import dotenv
 import unittest
 from pathlib import Path
 
-from src._pydantic.common import LakeFSConf, S3Conf
-from src._pydantic.train_test import TrainParams, TestParams, MLFlowModel
+from pawpaw.pydantic.common import LakeFSConf, S3Conf
+from pawpaw.pydantic.train_test import TrainParams, TestParams, MLFlowModel
 
 
 class ParameterTesting(unittest.TestCase):
@@ -23,11 +23,14 @@ class ParameterTesting(unittest.TestCase):
         assert params.metric == metric
     
     def test_model_registry(self):
-        model_name = 'dev.mymodelname'
-        os.environ['DEV_MODEL_REGISTRY_NAME'] = model_name
+        env_name = 'dev'
+        os.environ['TRAIN_MODEL_REGISTRY_ENV'] = env_name
+
+        model_name = 'mymodelname'
+        os.environ['TRAIN_MODEL_REGISTRY_NAME'] = model_name
 
         registry = MLFlowModel()
-        assert registry.model_registry_name == model_name
+        assert registry.model_registry_name == f'{env_name}.{model_name}'
     
     def test_lakefs_config(self):
         secret_id = 'mysupersecretid'

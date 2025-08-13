@@ -1,23 +1,21 @@
+import dotenv
 import tempfile
 from pathlib import Path
 from copy import deepcopy
 
 import mlflow
-from _ml.trainer import Trainer
-from _ml.model import PawDataLoader, PawModel
+from pawpaw.ml.trainer import Trainer
+from pawpaw.ml.model import PawDataLoader, PawModel
 
-import dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from _pydantic.common import S3Conf, LakeFSConf, MLFlowConf
-from _pydantic.train_test import TrainParams, MLFlowModel, TrainSummary, ModelRegisTags
+from pawpaw.pydantic.common import S3Conf, LakeFSConf, MLFlowConf
+from pawpaw.pydantic.train_test import TrainParams, TrainSummary, MLFlowModel
+from pawpaw.pydantic.train_test import ModelRegisTags
 
-from _s3.lakefs import replace_branch, get_exact_commit
-
-from prefect import flow, task
+from pawpaw.s3.lakefs import replace_branch, get_exact_commit
 
 
-@task
 def get_data_commit_id(data_source_repo: str, lfs_cfg: LakeFSConf) -> str:
     commit_id = get_exact_commit(data_source_repo, lfs_cfg, return_id = True)
     if not commit_id:
@@ -26,7 +24,7 @@ def get_data_commit_id(data_source_repo: str, lfs_cfg: LakeFSConf) -> str:
     print(f'Using commit "{commit_id[:8]}" from "{data_source_repo}"')
     return commit_id
 
-@task
+
 def model_training(
     params: TrainParams, s3_cfg: S3Conf, mlf_cfg: MLFlowConf
 ) -> TrainSummary:
@@ -78,7 +76,7 @@ def model_training(
 
     return summary
 
-@task
+
 def register_model(
     summary: TrainSummary, regis_tags: ModelRegisTags, mlf_model: MLFlowModel,
     mlf_cfg: MLFlowConf, finished_only: bool = True
@@ -115,7 +113,7 @@ def register_model(
     # However, the returned type will always be string
     return status.version
 
-@flow(name = 'Model Training')
+
 def run(
     data_source_repo: str, data_source_creds: LakeFSConf, train_params: TrainParams,
     regis_tags: ModelRegisTags, model_registry: MLFlowModel, mlflow_creds: MLFlowConf
@@ -141,7 +139,7 @@ def run(
     return version
 
 
-if __name__ == '__main__':
+def main():
     dotenv.load_dotenv(
         '.env.prod' if Path('.env.prod').exists()
         else '.env.dev'
@@ -172,3 +170,7 @@ if __name__ == '__main__':
         args.train_params, args.regis_tags,
         args.model_registry, args.mlflow_creds
     )
+
+
+if __name__ == '__main__':
+    main()

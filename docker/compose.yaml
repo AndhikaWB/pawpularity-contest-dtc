@@ -4,6 +4,8 @@ x-mlops-common:
   &mlops-common
   environment:
     &mlops-common-env
+    # Disable MLFlow telemetry, and potentially others
+    DO_NOT_TRACK: "true"
     # Read by JuiceFS to set the gateway auth
     MINIO_ROOT_USER: ${_S3_USERNAME}
     MINIO_ROOT_PASSWORD: ${_S3_PASSWORD}

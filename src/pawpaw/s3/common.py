@@ -4,8 +4,8 @@ from urllib.parse import urlparse
 from pathlib import Path, PurePosixPath
 
 import boto3
-from _pydantic.common import S3Conf
 from botocore.exceptions import ClientError
+from pawpaw.pydantic.common import S3Conf
 
 
 def download_dir(remote_dir: str, local_dir: str, s3_cfg: S3Conf, replace: bool = True):

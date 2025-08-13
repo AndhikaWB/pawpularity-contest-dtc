@@ -1,4 +1,3 @@
-import mlflow
 import dotenv
 import polars as pl
 from pathlib import Path
@@ -7,21 +6,19 @@ from datetime import datetime
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from _s3.lakefs import get_exact_commit, replace_branch
-from _pydantic.common import LakeFSConf, MLFlowConf, S3Conf
-from _pydantic.train_test import TrainParams, TestParams, TestSummary, MLFlowModel
-from _pydantic.train_test import ModelRegisTags, ModelBestTags
+import mlflow
+from pawpaw.training import run as training_run
+from pawpaw.s3.lakefs import get_exact_commit, replace_branch
+from pawpaw.pydantic.common import LakeFSConf, MLFlowConf, S3Conf
+from pawpaw.pydantic.train_test import TrainParams, ModelRegisTags, MLFlowModel
 
-from _ml.tester import Tester
-from _ml.utils import MetricTester
-from _monitoring.reporter import Reporter
-from _pydantic.report import ReportConf
-from training import run as training_run
-
-from prefect import flow, task
+from pawpaw.ml.tester import Tester
+from pawpaw.ml.utils import MetricTester
+from pawpaw.monitoring.reporter import Reporter
+from pawpaw.pydantic.report import ReportConf
+from pawpaw.pydantic.train_test import TestParams, TestSummary, ModelBestTags
 
 
-@task
 def get_data_commit_id(
     data_source_repo: str, lfs_cfg: LakeFSConf, check_date: bool = False
 ) -> str:
@@ -41,7 +38,6 @@ def get_data_commit_id(
 
     return commit.id
 
-@task
 def get_best_model_version(mlf_model: MLFlowModel, mlf_cfg: MLFlowConf) -> str | None:
     mlf_cfg.expose_auth_to_env()
     mlflow.set_tracking_uri(mlf_cfg.tracking_uri)
@@ -71,7 +67,7 @@ def get_best_model_version(mlf_model: MLFlowModel, mlf_cfg: MLFlowConf) -> str |
 
     return version
 
-@task
+
 def evaluate_model(
     version: str, params: TestParams, mlf_model: MLFlowModel, mlf_cfg: MLFlowConf,
     s3_cfg: S3Conf
@@ -105,7 +101,7 @@ def evaluate_model(
     print(f'Generated evaluation run id "{summary.run_id}"')
     return summary
 
-@task
+
 def set_best_model_version(
     summary: TestSummary, mlf_model: MLFlowModel, mlf_cfg: MLFlowConf
 ) -> str:
@@ -142,7 +138,7 @@ def set_best_model_version(
 
     return summary.model_version
 
-@task
+
 def generate_report(
     ref_commit_id: str | None, summary: TestSummary, mlf_cfg: MLFlowConf,
     report_cfg: ReportConf, table_name: str = 'monitoring'
@@ -175,7 +171,7 @@ def generate_report(
     print('Can\'t find reference data, no report generated')
     return False
 
-@flow(name = 'Model Evaluation')
+
 def run(
     data_source_repo: str, data_source_creds: LakeFSConf, train_params: TrainParams,
     regis_tags: ModelRegisTags, model_registry: MLFlowModel, mlflow_creds: MLFlowConf,
@@ -250,14 +246,14 @@ def run(
         generate_report(prev_commit_id, cur_summary, mlflow_creds, report_creds)
 
 
-if __name__ == '__main__':
+def main():
     dotenv.load_dotenv(
         '.env.prod' if Path('.env.prod').exists()
         else '.env.dev'
     )
 
     class ParseArgs(BaseSettings):
-        """Train a model using data sourced from S3."""
+        """Evaluate (and train if needed) a model using data sourced from S3."""
 
         model_config = SettingsConfigDict(
             cli_parse_args = True,
@@ -284,3 +280,7 @@ if __name__ == '__main__':
         args.model_registry, args.mlflow_creds,
         args.report_creds
     )
+
+
+if __name__ == '__main__':
+    main()

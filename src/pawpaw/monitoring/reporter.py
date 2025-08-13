@@ -5,8 +5,9 @@ import torch
 import nannyml as nml
 from nannyml.thresholds import ConstantThreshold
 
-from _pydantic.train_test import TestSummary
-from _pydantic.report import ReportSchema, ReportConf
+from pawpaw.pydantic.train_test import TestSummary
+from pawpaw.pydantic.report import ReportSchema, ReportConf
+
 
 class Reporter:
     """Helper class for generating drift report between current and reference data (both

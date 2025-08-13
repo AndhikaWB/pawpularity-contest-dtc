@@ -1,10 +1,10 @@
 import os
-import io
 from PIL import Image
-import streamlit as st
+from io import BytesIO
 
 import requests
-from _pydantic.serve import ServeRequest, ServeResponse
+import streamlit as st
+from pawpaw.pydantic.serve import ServeRequest, ServeResponse
 
 
 model_endpoint = os.getenv('SERVE_MODEL_ENDPOINT')
@@ -40,7 +40,7 @@ if img_uploaded:
 
     # The Kaggle dataset I used for training only have JPG files
     # So currently, my code is hardcoded to only look for JPG file
-    img_bytes = io.BytesIO()
+    img_bytes = BytesIO()
     img_uploaded.save(img_bytes, 'JPEG')
 
     st.image(img_bytes)

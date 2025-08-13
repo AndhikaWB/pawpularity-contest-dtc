@@ -1,12 +1,11 @@
 # Bypass line length limit
 # ruff: noqa: E501
 
-from typing import Annotated
-from argparse import SUPPRESS
 from datetime import datetime
 
+from typing import Annotated
 from pydantic import BaseModel, Field, computed_field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict, CLI_SUPPRESS
 
 
 class MLFlowModel(BaseSettings):
@@ -57,12 +56,12 @@ class TestParams(BaseSettings):
     metric_threshold: Annotated[float, Field(validation_alias = 'TEST_METRIC_THRESHOLD')]
 
     # To filter from other types of run
-    context: Annotated[str, Field(description = SUPPRESS)] = 'testing'
+    context: Annotated[str, Field(description = CLI_SUPPRESS)] = 'testing'
 
     # Will be set after getting the repo data from lakeFS
-    data_commit_id: Annotated[str, Field(description = SUPPRESS)] = None
-    csv_dir: Annotated[str, Field(description = SUPPRESS)] = None
-    img_dir: Annotated[str, Field(description = SUPPRESS)] = None
+    data_commit_id: Annotated[str, Field(description = CLI_SUPPRESS)] = None
+    csv_dir: Annotated[str, Field(description = CLI_SUPPRESS)] = None
+    img_dir: Annotated[str, Field(description = CLI_SUPPRESS)] = None
 
     # Just to configure the data loader
     img_size: Annotated[tuple[int, int], Field(validation_alias = 'TRAIN_IMG_SIZE')] = (128, 128)
@@ -85,20 +84,20 @@ class TrainParams(BaseSettings):
     patience: Annotated[int, Field(ge = 1, validation_alias = 'TRAIN_PATIENCE')] = 5
 
     # To filter from other types of run
-    context: Annotated[str, Field(description = SUPPRESS)] = 'training'
+    context: Annotated[str, Field(description = CLI_SUPPRESS)] = 'training'
 
     # Will be set after getting the repo data from lakeFS
-    data_commit_id: Annotated[str, Field(description = SUPPRESS)] = None
-    csv_dir: Annotated[str, Field(description = SUPPRESS)] = None
-    img_dir: Annotated[str, Field(description = SUPPRESS)] = None
+    data_commit_id: Annotated[str, Field(description = CLI_SUPPRESS)] = None
+    csv_dir: Annotated[str, Field(description = CLI_SUPPRESS)] = None
+    img_dir: Annotated[str, Field(description = CLI_SUPPRESS)] = None
 
     # Will be set when preparing for training
-    optimizer: Annotated[str, Field(description = SUPPRESS)] = None
-    criterion: Annotated[str, Field(description = SUPPRESS)] = None
+    optimizer: Annotated[str, Field(description = CLI_SUPPRESS)] = None
+    criterion: Annotated[str, Field(description = CLI_SUPPRESS)] = None
     # There's currently no standard for the metric name used here
     # It's totally up to the creator who made the training script
-    monitor: Annotated[str, Field(description = SUPPRESS)] = None
-    monitor_min: Annotated[bool, Field(description = SUPPRESS)] = True
+    monitor: Annotated[str, Field(description = CLI_SUPPRESS)] = None
+    monitor_min: Annotated[bool, Field(description = CLI_SUPPRESS)] = True
 
     def to_test(self) -> TestParams:
         """Try initializing the `TestParams` based on this instance data. Other required
@@ -153,8 +152,8 @@ class ModelRegisTags(BaseModel):
 
     model_config = SettingsConfigDict(validate_by_name = True, validate_default = False, extra = 'allow')
 
-    model_registered_at: Annotated[str, Field(description = SUPPRESS)] = None
-    train_data_commit_id: Annotated[str, Field(description = SUPPRESS)] = None
+    model_registered_at: Annotated[str, Field(description = CLI_SUPPRESS)] = None
+    train_data_commit_id: Annotated[str, Field(description = CLI_SUPPRESS)] = None
 
     framework: Annotated[str, Field(validation_alias = 'MODEL_TAG_FRAMEWORK')] = 'PyTorch'
     variant: Annotated[str, Field(description = 'MODEL_TAG_VARIANT')] = 'Simple CNN'

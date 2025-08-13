@@ -1,3 +1,4 @@
+import dotenv
 import polars as pl
 from tqdm import tqdm
 from pathlib import Path
@@ -6,19 +7,15 @@ from datetime import datetime
 from concurrent import futures
 from shutil import copyfile, rmtree
 
-import dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from _pydantic.common import S3Conf, LakeFSConf, ValidOrNone
+from pawpaw.pydantic.common import S3Conf, LakeFSConf, ValidOrNone
 
 import boto3
-from _s3.lakefs import get_repo_branch, commit_branch
-from _s3.common import download_dir, get_bucket_key, upload_dir
-
-from prefect import flow, task
+from pawpaw.s3.lakefs import get_repo_branch, commit_branch
+from pawpaw.s3.common import download_dir, get_bucket_key, upload_dir
 
 
-@task
 def pull_data(remote_dir: str, local_dir: str, s3_cfg: S3Conf | None = None) -> str:
     # If not an S3 URI, assume it's a local path
     if not remote_dir.startswith('s3://'):
@@ -32,7 +29,7 @@ def pull_data(remote_dir: str, local_dir: str, s3_cfg: S3Conf | None = None) -> 
 
     return local_dir
 
-@task
+
 def preproc_data(
     in_dir: str, out_dir: str, sample: int = 2000, seed: int = 1337
 ) -> str:
@@ -75,7 +72,7 @@ def preproc_data(
 
     return out_dir
 
-@task
+
 def purge_remote_data(remote_dir: str, s3_cfg: S3Conf):
     bucket, target_dir = get_bucket_key(remote_dir)
     s3 = boto3.resource('s3', **s3_cfg.model_dump())
@@ -93,12 +90,12 @@ def purge_remote_data(remote_dir: str, s3_cfg: S3Conf):
     # To save it as real changes, we need to commit it later
     bucket.objects.filter(Prefix = target_dir).delete()
 
-@task
+
 def upload_data(local_dir: str, remote_dir: str, s3_cfg: S3Conf):
     print(f'Uploading "{local_dir}" to "{remote_dir}"')
     upload_dir(local_dir, remote_dir, s3_cfg, replace = True)
 
-@task
+
 def commit_data(repo_id: str, branch: str, lfs_cfg: LakeFSConf) -> str:
     print(f'Commiting changes to "{repo_id}/{branch}"')
     commit_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -113,7 +110,7 @@ def commit_data(repo_id: str, branch: str, lfs_cfg: LakeFSConf) -> str:
     print(f'Saved changes as commit id "{commit_id}"')
     return commit_id
 
-@flow(name = 'Preprocess Data')
+
 def run(
     source_dir: str, target_dir: str, source_creds: S3Conf | None,
     target_creds: LakeFSConf, seed: int
@@ -133,7 +130,7 @@ def run(
     return target_dir
 
 
-if __name__ == '__main__':
+def main():
     dotenv.load_dotenv(
         '.env.prod' if Path('.env.prod').exists()
         else '.env.dev'
@@ -164,3 +161,7 @@ if __name__ == '__main__':
         args.source_creds, args.target_creds,
         args.seed
     )
+
+
+if __name__ == '__main__':
+    main()

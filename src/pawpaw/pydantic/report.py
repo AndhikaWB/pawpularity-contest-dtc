@@ -2,9 +2,9 @@
 # ruff: noqa: E501
 
 import re
-from typing import Annotated
 from datetime import datetime
 
+from typing import Annotated
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 

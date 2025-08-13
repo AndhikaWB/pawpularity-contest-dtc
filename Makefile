@@ -8,17 +8,17 @@ preprocess:
 	uv run src/preprocess.py
 
 training:
-	uv run  src/training.py
+	uv run src/training.py
 
 evaluation:
-	uv run  src/evaluation.py
+	uv run src/evaluation.py
 
 serving:
-	uv run  src/serving.py
+	uv run src/serving.py
 
 webapp:
 	source "$(CURDIR)/.venv/Scripts/activate"
-	streamlit run src/webapp.py
+	streamlit run src/pawpaw/webapp.py
 
 compose:
 	cd docker

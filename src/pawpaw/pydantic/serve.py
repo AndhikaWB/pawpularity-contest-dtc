@@ -3,7 +3,7 @@
 
 from typing import Annotated
 from fastapi import UploadFile
-from pydantic import BaseModel, ConfigDict, AliasGenerator, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ServeRequest(BaseModel):
@@ -12,10 +12,8 @@ class ServeRequest(BaseModel):
     """
 
     model_config = ConfigDict(
-        alias_generator = AliasGenerator(
-            # This will change "var_name" to "Var Name" when dumping the model
-            alias = lambda var: var.replace('_', ' ').capitalize()
-        ),
+        # This will change "var_name" to "Var Name" when dumping the model
+        alias_generator = lambda var: var.replace('_', ' ').capitalize(),
         # Allow request using the raw field name or the alias
         validate_by_name = True
     )

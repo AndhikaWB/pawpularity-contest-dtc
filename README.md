@@ -37,9 +37,9 @@ However, the original CSV is already included in this repo, and has been renamed
 
 ### First Time Setup
 
-1. Please install [uv](https://docs.astral.sh/uv/) first, then run `make setup` to let uv manage the Python package dependencies
-    - Unlike pip or Conda, uv keeps a detailed info of every package dependencies, ensuring maximum reproducibility
-    - A virtual environment (`.venv`) will also be created on the root of this project. Currently, uv doesn't support [centralized environment](https://github.com/astral-sh/uv/issues/6612) yet
+1. This project uses [uv](https://docs.astral.sh/uv/), so you may need to install it first, then run `make setup` to let uv manage the Python package dependencies
+    - Unlike pip or Conda, uv keeps a detailed info of every package dependencies, ensuring version consistency and maximum reproducibility
+    - A virtual environment (`.venv`) will be created on the root project directory when you run the command above. Currently, uv doesn't support [centralized environment](https://github.com/astral-sh/uv/issues/6612) like Conda or Poetry yet
     - I use the CUDA version of PyTorch by default, which is significantly faster than the CPU version, but will not work without an Nvidia GPU
     - You can delete the `[tool.uv.sources]` section on the `pyproject.toml` to try the CPU version of PyTorch. However, I can't guarantee if the identical CPU version exists on PyPI or not
 2. Prepare and run Docker compose using `make compose`
@@ -60,22 +60,34 @@ However, the original CSV is already included in this repo, and has been renamed
     - Each time this is run, a new commit containing random sample of the raw data will be created on lakeFS
     - We can treat these commits as unique monthly data, or data that are taken at different times from a streaming source
 
-### Model Training and Evaluation
+### Model Training
+
+<details>
+  <summary>Unused, click to show anyway</summary>
+
+1. Run the training script (`make training`)
+    - You should run the model evaluation below instead, which will also run the training process if needed
+    - This command is only used by me during early development, when the evaluation/testing script was not created yet because it depends on this training script
+    - Running training without evaluation will disconnect the model resulted from that training run, meaning that the model is unknown to the system (and will never be used) because no proper test/scoring was ever done to this model
+
+</details>
+
+### Model Evaluation
 
 1. Run the evaluation script (`make evaluation`)
-    - This will automatically run the training workflow (`make training`) in case there's no model yet, or if the current model test result (tested with data from the newest commit) is below the metric threshold. The threshold is set via environment variable (e.g. from `.env.dev` file)
+    - This will automatically run the training workflow in case there's no model yet, or if the current model test result (tested with data from the newest commit) is below the metric threshold. The threshold is set via environment variable (e.g. from `.env.dev` file)
     - At the end of training, the models will be evaluated and compared automatically. The evaluation is tied to the model and commit id, so if there are 2 models, there will be 2 evaluation results. Model with the best evaluation result will be marked with a version alias so we can easily load and serve it later
     - Because the evaluation process can be expensive, the evaluation result will be saved as MLFlow artifact. If the same model and commit id is detected, we will load the existing evaluation data instead. These data can also be loaded for drift monitoring purpose
     - If no drift report is generated after an evaluation, this is normal because we only have 1 commit so far and no reference/previous data yet. To generate a drift report, we need a minimum of 2 commits (excluding the initial dummy commit), so you may want to re-run the preprocess step once again
     - Make sure you also run at least one evaluation for each commit because the evaluation data is tied to the commit id. If a commit has no evaluation, it will be skipped from drift report because it can't find the evaluation data tied to that commit
-    - The drift report data will be saved to PostgreSQL database, and can be read by Grafana later
+    - The drift report data will be saved to PostgreSQL database, and can be read by Grafana later. The database credentials can be set via environment variables, as usual
 
 ### Model Serving and Web App
 
 1. To serve the best model, simply run the serving script (`make serving`)
     - The Uvicorn port has been changed from 8000 to 8765 to avoid conflict with lakeFS
     - It will load the best model from MLFlow registry, via the model version alias we set during evaluation earlier
-    - Currently it doesn't auto reload the best model once you run it (not sure what's the best approach here), but you still can visit the [/reload](http://localhost:8765/reload) endpoint to reload the model manually
+    - Currently it doesn't auto reload the best model once you run it (not sure what's the best approach yet), but you still can visit the [/reload](http://localhost:8765/reload) endpoint to reload the model manually
 2. To send request to the served model, you can use the older (and ugly) [test form](http://localhost:8765), or run the newer, separate Streamlit server (`make webapp`)
 
 ## Learning Notes

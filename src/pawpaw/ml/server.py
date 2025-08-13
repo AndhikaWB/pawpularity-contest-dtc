@@ -4,12 +4,13 @@ import polars as pl
 
 import torch
 from lightning import Fabric
-from _ml.model import PawDataLoader
+from pawpaw.ml.model import PawDataLoader
 
 import mlflow
-from _pydantic.common import MLFlowConf
-from _pydantic.train_test import TestParams, MLFlowModel
-from _pydantic.serve import ServeRequest, ServeResponse, ModelInfo
+from pawpaw.pydantic.common import MLFlowConf
+from pawpaw.pydantic.train_test import TestParams, MLFlowModel
+
+from pawpaw.pydantic.serve import ServeRequest, ServeResponse, ModelInfo
 
 
 class Server:

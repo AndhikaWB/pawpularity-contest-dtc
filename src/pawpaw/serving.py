@@ -2,10 +2,10 @@ import dotenv
 import uvicorn
 from pathlib import Path
 
-from _ml.server import Server
-from _pydantic.common import MLFlowConf
-from _pydantic.serve import ServeRequest, ServeResponse
-from _pydantic.train_test import TestParams, MLFlowModel
+from pawpaw.ml.server import Server
+from pawpaw.pydantic.common import MLFlowConf
+from pawpaw.pydantic.serve import ServeRequest, ServeResponse
+from pawpaw.pydantic.train_test import TestParams, MLFlowModel
 
 from typing import Annotated
 from fastapi import FastAPI, Form, File

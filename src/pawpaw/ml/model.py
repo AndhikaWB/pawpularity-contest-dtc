@@ -1,18 +1,19 @@
-import io
 import polars as pl
-from PIL import Image
 from pathlib import Path
 
 import torch
 from torch import nn, Tensor
 from torch.utils.data import Dataset, DataLoader
-from torchvision.io import decode_image
+
+from PIL import Image
+from io import BytesIO
 from torchvision.transforms import v2
+from torchvision.io import decode_image
 from torchvision.transforms.functional import pil_to_tensor
 
 import boto3
-from _pydantic.common import S3Conf
-from _s3.common import get_bucket_key
+from pawpaw.pydantic.common import S3Conf
+from pawpaw.s3.common import get_bucket_key
 
 
 class PawDataset(Dataset):
@@ -50,7 +51,7 @@ class PawDataset(Dataset):
 
         # Using S3 bucket with no cache dir
         if not self.cache_dir:
-            with io.BytesIO() as img_buff:
+            with BytesIO() as img_buff:
                 self.bucket.download_fileobj(
                     Key = Path(img_path).as_posix(),
                     Fileobj = img_buff

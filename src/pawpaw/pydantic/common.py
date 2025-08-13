@@ -2,8 +2,8 @@
 # ruff: noqa: E501
 
 import os
-from typing import Annotated
 
+from typing import Annotated
 from pydantic import BaseModel, Field, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 

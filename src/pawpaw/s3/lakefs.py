@@ -4,7 +4,7 @@ from pathlib import PurePosixPath
 import lakefs
 from lakefs.models import Commit
 from lakefs.exceptions import NotFoundException
-from _pydantic.common import LakeFSConf
+from pawpaw.pydantic.common import LakeFSConf
 
 
 def get_repo_branch(s3_path: str) -> tuple[str, str]:

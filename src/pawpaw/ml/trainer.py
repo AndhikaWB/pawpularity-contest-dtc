@@ -12,9 +12,9 @@ from torch.utils.data import DataLoader
 from lightning import Fabric
 import torchmetrics as tm
 
-from _pydantic.common import MLFlowConf
-from _ml.utils import LossMetric, EarlyStopping, QSave
-from _pydantic.train_test import TrainParams, TrainSummary
+from pawpaw.pydantic.common import MLFlowConf
+from pawpaw.ml.utils import LossMetric, EarlyStopping, QSave
+from pawpaw.pydantic.train_test import TrainParams, TrainSummary
 
 
 class Trainer:

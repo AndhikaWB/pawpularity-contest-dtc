@@ -1,10 +1,10 @@
 import tempfile
-import polars as pl
 import warnings
+import polars as pl
 
 import torch
 from lightning import Fabric
-from _ml.model import PawDataLoader
+from pawpaw.ml.model import PawDataLoader
 
 import mlflow
 from mlflow.data.pandas_dataset import PandasDataset
@@ -12,8 +12,8 @@ from mlflow.data.http_dataset_source import HTTPDatasetSource
 from mlflow.models.evaluation import EvaluationResult
 from mlflow.exceptions import MlflowException
 
-from _pydantic.train_test import TestParams, TestSummary
-from _pydantic.common import MLFlowConf, S3Conf
+from pawpaw.pydantic.common import MLFlowConf, S3Conf
+from pawpaw.pydantic.train_test import TestParams, TestSummary
 
 
 class Tester:
