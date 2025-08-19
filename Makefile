@@ -19,6 +19,9 @@ serving:
 webapp:
 	uv run streamlit run src/pawpaw/webapp.py
 
+pytest:
+	uv run pytest tests/
+
 compose:
 	cd docker
 	docker compose --env-file .env.dev up

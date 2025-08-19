@@ -1,8 +1,4 @@
 import os
-import dotenv
-import warnings
-import unittest
-from pathlib import Path
 
 from pydantic import ValidationError
 from pydantic_settings import BaseSettings
@@ -35,31 +31,15 @@ def check_alias_against_env(model: type[BaseSettings]):
                     for error in e.errors():
                         if field.validation_alias in error['loc']:
                             # This can be caused by incorrect model_config
-                            # Or just an alias error (e.g. missing from env)
+                            # Or purely an alias error (e.g. missing from env)
                             raise ValidationError.from_exception_data(
                                 model.__name__,
                                 [error]
                             )
-            else:
-                if not cur_env_value:
-                    # Optional field that can read from environment variable
-                    # But we don't have that alias set in our environment
-                    warnings.warn(
-                        f'Alias "{field.validation_alias}" on model "{model.__name__}" '
-                        f'is not set, will fallback to "{field.default}"'
-                    )
 
 
-class EnvironmentTesting(unittest.TestCase):
+class TestEnvironment:
     """Test if we have the environment variables that are needed by the models."""
-
-    def setUp(self):
-        # Workaround if the code is not executed as a __main__ script
-        # The environment is guaranteed to be refreshed this way
-        dotenv.load_dotenv(
-            '.env.prod' if Path('.env.prod').exists() else '.env.dev',
-            override = False
-        )
 
     def test_lakefs_config(self):
         check_alias_against_env(LakeFSConf)
@@ -84,7 +64,3 @@ class EnvironmentTesting(unittest.TestCase):
 
     def test_serve_config(self):
         check_alias_against_env(ServeConf)
-
-
-if __name__ == '__main__':
-    unittest.main()

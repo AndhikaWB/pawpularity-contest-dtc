@@ -1,8 +1,8 @@
 # Bypass line length limit
 # ruff: noqa: E501
 
-from typing import Annotated
 from datetime import datetime
+from typing import Annotated, ClassVar
 
 from pydantic import BaseModel, Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict, CLI_SUPPRESS
@@ -47,6 +47,9 @@ class TestParams(BaseSettings):
     """
 
     model_config = SettingsConfigDict(validate_by_name = True, validate_default = False, extra = 'allow')
+
+    # Don't treat this class as a test when using pytest
+    __test__: ClassVar[bool] = False
 
     # Metric name here must match the name returned by "mlflow.evaluate" function
     # So it may be different from training metric (e.g. rmse vs root_mean_square_error)

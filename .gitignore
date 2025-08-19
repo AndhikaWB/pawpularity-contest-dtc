@@ -1,5 +1,6 @@
 # Junk folders
 __pycache__/
+/.pytest_cache/
 /.venv/
 
 # Data folder
