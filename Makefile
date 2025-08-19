@@ -5,20 +5,19 @@ setup:
 	uv sync
 
 preprocess:
-	uv run src/preprocess.py
+	uv run src/pawpaw/preprocess.py
 
 training:
-	uv run src/training.py
+	uv run src/pawpaw/training.py
 
 evaluation:
-	uv run src/evaluation.py
+	uv run src/pawpaw/evaluation.py
 
 serving:
-	uv run src/serving.py
+	uv run fastapi run src/pawpaw/serving.py --port 8765
 
 webapp:
-	source "$(CURDIR)/.venv/Scripts/activate"
-	streamlit run src/pawpaw/webapp.py
+	uv run streamlit run src/pawpaw/webapp.py
 
 compose:
 	cd docker

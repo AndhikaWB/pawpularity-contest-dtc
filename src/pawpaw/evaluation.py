@@ -1,6 +1,7 @@
 import dotenv
 import polars as pl
 from pathlib import Path
+from pawpaw import logger
 from datetime import datetime
 
 from pydantic import Field
@@ -9,22 +10,24 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 import mlflow
 from pawpaw.training import run as training_run
 from pawpaw.s3.lakefs import get_exact_commit, replace_branch
-from pawpaw.pydantic.common import LakeFSConf, MLFlowConf, S3Conf
-from pawpaw.pydantic.train_test import TrainParams, ModelRegisTags, MLFlowModel
+from pawpaw.pydantic_.common import LakeFSConf, MLFlowConf, S3Conf
+from pawpaw.pydantic_.train_test import TrainParams, ModelRegisTags, MLFlowModel
 
 from pawpaw.ml.tester import Tester
 from pawpaw.ml.utils import MetricTester
 from pawpaw.monitoring.reporter import Reporter
-from pawpaw.pydantic.report import ReportConf
-from pawpaw.pydantic.train_test import TestParams, TestSummary, ModelBestTags
+from pawpaw.pydantic_.report import ReportConf
+from pawpaw.pydantic_.train_test import TestParams, TestSummary, ModelBestTags
 
 
 def get_data_commit_id(
     data_source_repo: str, lfs_cfg: LakeFSConf, check_date: bool = False
 ) -> str:
+    logger.debug(f'Getting latest commit from "{data_source_repo}"')
+
     commit = get_exact_commit(data_source_repo, lfs_cfg, return_id = False)
     if not commit:
-        raise RuntimeError(f'Can\'t get latest commit from "{data_source_repo}"')
+        raise RuntimeError(f'Can\'t get latest commit info')
 
     # Creation date is an epoch with no timezone (naive/local time)
     # We only need the date, but we can also extract the time if needed
@@ -33,8 +36,10 @@ def get_data_commit_id(
     if check_date and days_since_commit >= 28:
         raise RuntimeError(f'Last commit was {days_since_commit} days ago')
 
-    print(f'Using commit "{commit.id[:8]}" from "{data_source_repo}"')
-    print(f'Commit was pushed {days_since_commit} days ago ({commit_date})')
+    logger.info(
+        f'Using commit "{commit.id[:8]}" from "{data_source_repo}". '
+        f'Commit was pushed {days_since_commit} days ago ({commit_date})'
+    )
 
     return commit.id
 
@@ -43,15 +48,17 @@ def get_best_model_version(mlf_model: MLFlowModel, mlf_cfg: MLFlowConf) -> str |
     mlflow.set_tracking_uri(mlf_cfg.tracking_uri)
     client = mlflow.MlflowClient()
 
+    registry_name = mlf_model.model_registry_name
+    alias_name = mlf_model.best_version_alias
+
     # If found, this model will be tested with the latest data later
-    print(f'Getting the best model version from "{mlf_model.model_registry_name}"')
-    alias = mlf_model.best_version_alias
+    logger.debug(f'Getting the best model version from "{registry_name}"')
 
     try:
         # Try getting the best model using a version alias
         version = client.get_model_version_by_alias(
-            mlf_model.model_registry_name,
-            alias = alias
+            registry_name,
+            alias = alias_name
         ).version
     except mlflow.exceptions.RestException as err:
         # If there's no version under that alias
@@ -60,9 +67,9 @@ def get_best_model_version(mlf_model: MLFlowModel, mlf_cfg: MLFlowConf) -> str |
         else:
             raise err
 
-    print(
-        f'Alias "{alias}" is tied to model version "{version}"' if version
-        else f'No model version under the alias "{alias}" yet'
+    logger.info(
+        f'Alias "{alias_name}" is tied to model version "{version}"' if version
+        else f'No model version under the alias "{alias_name}" yet'
     )
 
     return version
@@ -73,9 +80,9 @@ def evaluate_model(
     s3_cfg: S3Conf
 ) -> TestSummary:
     if not (params.csv_dir or params.img_dir or params.data_commit_id):
-        raise ValueError('Data sources or commit id can\'t be empty')
+        raise ValueError('Data source or commit id can\'t be empty')
 
-    print(
+    logger.debug(
         f'Evaluating model version "{version}" with data from commit id '
         f'"{params.data_commit_id[:8]}"'
     )
@@ -98,7 +105,7 @@ def evaluate_model(
     # The model id (if not None) will be tied here with the evaluation
     summary = tester.run_evaluation(df, params, mlf_cfg)
 
-    print(f'Generated evaluation run id "{summary.run_id}"')
+    logger.info(f'Generated evaluation with run id "{summary.run_id}"')
     return summary
 
 
@@ -109,7 +116,10 @@ def set_best_model_version(
     mlflow.set_tracking_uri(mlf_cfg.tracking_uri)
     client = mlflow.MlflowClient()
 
-    print('Setting version alias for the best model')
+    logger.debug(
+        f'Setting alias for the best model version ({summary.model_version}) '
+        f'under "{mlf_model.model_registry_name}"'
+    )
 
     client.set_registered_model_alias(
         mlf_model.model_registry_name,
@@ -131,9 +141,9 @@ def set_best_model_version(
             value = val
         )
 
-    print(
-        f'Marked model version "{summary.model_version}" with '
-        f'alias "{mlf_model.best_version_alias}"'
+    logger.info(
+        f'Marked model version "{summary.model_version}" with alias '
+        f'"{mlf_model.best_version_alias}"'
     )
 
     return summary.model_version
@@ -144,13 +154,15 @@ def generate_report(
     report_cfg: ReportConf, table_name: str = 'monitoring'
 ) -> bool:
     if not ref_commit_id:
-        print('No reference data yet, no report generated')
+        logger.info('No reference data yet, no report generated')
         return False
-    
-    print('Generating drift monitoring report')
-    print(f'* Current model version = {summary.model_version}')
-    print(f'* Current commit id = {summary.data_commit_id}')
-    print(f'* Reference commit id = {ref_commit_id}')
+
+    logger.debug(
+       'Generating drift monitoring report for model version '
+       f'"{summary.model_version}". Current commit id is '
+       f'"{summary.data_commit_id[:8]}" and reference commit id is '
+       f'"{ref_commit_id[:8]}"'
+    )
 
     # Pass info about the current data and evaluation result
     cur_df = Tester.load_prediction(summary.run_id, mlf_cfg, error_ok = False)
@@ -165,10 +177,13 @@ def generate_report(
         # Generate the drift report and write it to a database
         report_df = reporter.generate_report(ref_run_id, ref_commit_id, ref_df, summary)
         reporter.write_report_to_db(report_df, table_name, report_cfg)
-        print(f'Written report to database table "{table_name}"')
+        logger.info(f'Written report to database table "{table_name}"')
         return True
 
-    print('Can\'t find reference data, no report generated')
+    logger.warning(
+        'Can\'t find evaluation data for the referenced commit id, no report generated'
+    )
+
     return False
 
 
@@ -248,8 +263,8 @@ def run(
 
 def main():
     dotenv.load_dotenv(
-        '.env.prod' if Path('.env.prod').exists()
-        else '.env.dev'
+        '.env.prod' if Path('.env.prod').exists() else '.env.dev',
+        override = False
     )
 
     class ParseArgs(BaseSettings):

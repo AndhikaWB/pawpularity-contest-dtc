@@ -5,7 +5,7 @@ from pathlib import Path, PurePosixPath
 
 import boto3
 from botocore.exceptions import ClientError
-from pawpaw.pydantic.common import S3Conf
+from pawpaw.pydantic_.common import S3Conf
 
 
 def download_dir(remote_dir: str, local_dir: str, s3_cfg: S3Conf, replace: bool = True):
@@ -133,7 +133,7 @@ def get_bucket_key(s3_path: str) -> tuple[str, str]:
         ValueError: If the bucket name can't be extracted.
 
     Returns:
-        tuple[str,str]: Bucket name and key (key can be an empty string).
+        tuple[str, str]: Bucket name and key (key can be an empty string).
     """
 
     path = urlparse(s3_path, 's3')

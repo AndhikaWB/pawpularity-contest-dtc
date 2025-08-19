@@ -4,7 +4,7 @@ from pathlib import PurePosixPath
 import lakefs
 from lakefs.models import Commit
 from lakefs.exceptions import NotFoundException
-from pawpaw.pydantic.common import LakeFSConf
+from pawpaw.pydantic_.common import LakeFSConf
 
 
 def get_repo_branch(s3_path: str) -> tuple[str, str]:
@@ -18,7 +18,7 @@ def get_repo_branch(s3_path: str) -> tuple[str, str]:
         ValueError: If the repo id or the branch name can't be extracted.
 
     Returns:
-        tuple[str,str]: Repo id and branch name (or commit id).
+        tuple[str, str]: Repo id and branch name (or commit id).
     """
 
     path = urlparse(s3_path, 's3')

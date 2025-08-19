@@ -76,8 +76,10 @@ class EarlyStopping:
 
 class LossMetric(tm.Metric):
     """Wrap PyTorch loss class as Lightning metric to easily compute average loss at
-    the end of each epoch. Note that once wrapped, the loss class will work solely as a
-    metric. You should use a separate, unwrapped loss class to calculate the gradient.
+    the end of each epoch.
+    
+    Note that once wrapped, the loss class will work solely as a metric. You should use 
+    a separate, unwrapped loss class to calculate the gradient.
 
     Args:
         loss_class (Module): The PyTorch loss class to wrap (e.g. `BCELoss`).

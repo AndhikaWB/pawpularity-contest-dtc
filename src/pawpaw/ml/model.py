@@ -1,3 +1,4 @@
+import io
 import polars as pl
 from pathlib import Path
 
@@ -6,13 +7,12 @@ from torch import nn, Tensor
 from torch.utils.data import Dataset, DataLoader
 
 from PIL import Image
-from io import BytesIO
 from torchvision.transforms import v2
 from torchvision.io import decode_image
 from torchvision.transforms.functional import pil_to_tensor
 
 import boto3
-from pawpaw.pydantic.common import S3Conf
+from pawpaw.pydantic_.common import S3Conf
 from pawpaw.s3.common import get_bucket_key
 
 
@@ -51,7 +51,7 @@ class PawDataset(Dataset):
 
         # Using S3 bucket with no cache dir
         if not self.cache_dir:
-            with BytesIO() as img_buff:
+            with io.BytesIO() as img_buff:
                 self.bucket.download_fileobj(
                     Key = Path(img_path).as_posix(),
                     Fileobj = img_buff
@@ -205,7 +205,16 @@ class PawDataLoader:
 
 
 class PawModel(nn.Module):
-    """PyTorch model for predicting pet pawpularity."""
+    """PyTorch model for predicting pet pawpularity.
+
+    Args:
+        image: Input images as tensor.
+        features: Tabular features/metadata of the images as tensor.
+
+    Returns:
+        Tensor: Predicted pawpularity score between 0 and 1 (multiply by 100 manually
+            if needed).
+    """
 
     def __init__(self):
         super().__init__()

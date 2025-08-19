@@ -1,25 +1,28 @@
 import tempfile
 import polars as pl
 
-import mlflow
-from mlflow.data.meta_dataset import MetaDataset
-from mlflow.types import Schema, ColSpec, DataType
-from mlflow.data.http_dataset_source import HTTPDatasetSource
-
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
 from lightning import Fabric
 import torchmetrics as tm
 
-from pawpaw.pydantic.common import MLFlowConf
+import mlflow
+from mlflow.data.meta_dataset import MetaDataset
+from mlflow.types import Schema, ColSpec, DataType
+from mlflow.data.http_dataset_source import HTTPDatasetSource
+
+from pawpaw.pydantic_.common import MLFlowConf
 from pawpaw.ml.utils import LossMetric, EarlyStopping, QSave
-from pawpaw.pydantic.train_test import TrainParams, TrainSummary
+from pawpaw.pydantic_.train_test import TrainParams, TrainSummary
 
 
 class Trainer:
-    """Helper class to train a new PyTorch model for predicting pet pawpularity. It
-    utilizes MLFlow to track the training process and log the training result.
+    """Helper class to train a new model for predicting pet pawpularity.
+    
+    To start the training (with MLFlow), call `prep_training` first before continuing
+    with `start_training`. The training may produce several models, which can then be
+    filtered by calling the `get_best_model` function.
     """
 
     def __init__(
@@ -202,10 +205,9 @@ class Trainer:
                     _optimizer = self.optimizer.optimizer
 
                     model_info = mlflow.pytorch.log_model(
-                        _model,
+                        torch.jit.script(_model),
                         name = _model.__class__.__name__,
                         step = epoch,
-                        conda_env = 'conda.yaml',
                         signature = mlflow.models.infer_signature(
                             model_input = {
                                 'image': ds['image'].numpy(force = True),
@@ -248,6 +250,10 @@ class Trainer:
     def get_best_model(
         self, run_id: str, params: TrainParams, mlf_cfg: MLFlowConf, delete_others: bool
     ) -> TrainSummary:
+        """Get the best logged models from the current run, and delete the other models
+        if needed.
+        """
+
         if not (run_id or params.monitor):
             raise ValueError('Run id or metric to compare can\'t be empty')
 

@@ -2,6 +2,7 @@ import dotenv
 import polars as pl
 from tqdm import tqdm
 from pathlib import Path
+from pawpaw import logger
 from random import randint
 from datetime import datetime
 from concurrent import futures
@@ -9,7 +10,7 @@ from shutil import copyfile, rmtree
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pawpaw.pydantic.common import S3Conf, LakeFSConf, ValidOrNone
+from pawpaw.pydantic_.common import S3Conf, LakeFSConf, ValidOrNone
 
 import boto3
 from pawpaw.s3.lakefs import get_repo_branch, commit_branch
@@ -19,12 +20,12 @@ from pawpaw.s3.common import download_dir, get_bucket_key, upload_dir
 def pull_data(remote_dir: str, local_dir: str, s3_cfg: S3Conf | None = None) -> str:
     # If not an S3 URI, assume it's a local path
     if not remote_dir.startswith('s3://'):
-        print(f'Using data from "{local_dir}"')
+        logger.info(f'Using data from "{local_dir}"')
         return local_dir
     elif not s3_cfg:
         raise ValueError('S3 credentials can\'t be empty if using S3')
 
-    print(f'Pulling data from "{remote_dir}" to "{local_dir}"')
+    logger.debug(f'Pulling data from "{remote_dir}" to "{local_dir}"')
     download_dir(remote_dir, local_dir, s3_cfg, replace = True)
 
     return local_dir
@@ -46,7 +47,7 @@ def preproc_data(
     df_train = df_tmp.head(len(df_tmp) - len(df_val))
 
     rmtree(out_dir, ignore_errors = True)
-    print(f'Saving preprocessed data to "{out_dir}"')
+    logger.debug(f'Saving preprocessed data to "{out_dir}"')
     Path(out_dir, 'images').mkdir(parents = True, exist_ok = True)
 
     img_files = [
@@ -78,7 +79,7 @@ def purge_remote_data(remote_dir: str, s3_cfg: S3Conf):
     s3 = boto3.resource('s3', **s3_cfg.model_dump())
     bucket = s3.Bucket(bucket)
 
-    print(f'Purging data on "{remote_dir}"')
+    logger.debug(f'Purging data on "{remote_dir}"')
 
     # Prevent catching long file/folder name with the same prefix
     # E.g. this/example/dir/ and this/example/dirislonger/
@@ -92,12 +93,12 @@ def purge_remote_data(remote_dir: str, s3_cfg: S3Conf):
 
 
 def upload_data(local_dir: str, remote_dir: str, s3_cfg: S3Conf):
-    print(f'Uploading "{local_dir}" to "{remote_dir}"')
+    logger.debug(f'Uploading "{local_dir}" to "{remote_dir}"')
     upload_dir(local_dir, remote_dir, s3_cfg, replace = True)
 
 
 def commit_data(repo_id: str, branch: str, lfs_cfg: LakeFSConf) -> str:
-    print(f'Commiting changes to "{repo_id}/{branch}"')
+    logger.debug(f'Commiting changes to "{repo_id}/{branch}"')
     commit_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     commit_id = commit_branch(
@@ -107,7 +108,7 @@ def commit_data(repo_id: str, branch: str, lfs_cfg: LakeFSConf) -> str:
         lfs_cfg = lfs_cfg
     )
 
-    print(f'Saved changes as commit id "{commit_id}"')
+    logger.info(f'Saved changes as commit id "{commit_id}"')
     return commit_id
 
 
@@ -132,8 +133,8 @@ def run(
 
 def main():
     dotenv.load_dotenv(
-        '.env.prod' if Path('.env.prod').exists()
-        else '.env.dev'
+        '.env.prod' if Path('.env.prod').exists() else '.env.dev',
+        override = False
     )
 
     class ParseArgs(BaseSettings):

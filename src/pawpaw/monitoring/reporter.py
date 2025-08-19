@@ -5,14 +5,15 @@ import torch
 import nannyml as nml
 from nannyml.thresholds import ConstantThreshold
 
-from pawpaw.pydantic.train_test import TestSummary
-from pawpaw.pydantic.report import ReportSchema, ReportConf
+from pawpaw.pydantic_.train_test import TestSummary
+from pawpaw.pydantic_.report import ReportSchema, ReportConf
 
 
 class Reporter:
-    """Helper class for generating drift report between current and reference data (both
-    data can be loaded from the existing evaluation runs). The generated report can also
-    be uploaded to database later.
+    """Helper class for generating drift report between current and reference data.
+    
+    Use `generate_report` to generate the report (as `DataFrame`), and upload the
+    report to database with `write_report_to_db` if needed (e.g. to be used by Grafana).
     """
 
     def __init__(self, summary: TestSummary, df: pl.DataFrame):

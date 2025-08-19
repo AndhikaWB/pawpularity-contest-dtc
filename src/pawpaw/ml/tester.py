@@ -1,5 +1,5 @@
-import tempfile
 import warnings
+import tempfile
 import polars as pl
 
 import torch
@@ -7,19 +7,21 @@ from lightning import Fabric
 from pawpaw.ml.model import PawDataLoader
 
 import mlflow
+from mlflow.exceptions import MlflowException
 from mlflow.data.pandas_dataset import PandasDataset
 from mlflow.data.http_dataset_source import HTTPDatasetSource
 from mlflow.models.evaluation import EvaluationResult
-from mlflow.exceptions import MlflowException
 
-from pawpaw.pydantic.common import MLFlowConf, S3Conf
-from pawpaw.pydantic.train_test import TestParams, TestSummary
+from pawpaw.pydantic_.common import MLFlowConf, S3Conf
+from pawpaw.pydantic_.train_test import TestParams, TestSummary
 
 
 class Tester:
-    """Helper class for testing/evaluating a registered MLFlow model. It will save the
-    evaluation data as MLFlow artifact, which can also be used for drift monitoring
-    purpose later.
+    """Helper class for testing/evaluating a registered MLFlow model.
+    
+    Run the evaluation using the `run_evaluation` function. The evaluation data will be
+    saved as MLFlow artifact, and can be loaded again using `load_prediction` function
+    later (e.g. for drift monitoring purpose).
     """
 
     def __init__(
@@ -94,8 +96,8 @@ class Tester:
     def run_evaluation(
         self, df: pl.DataFrame, params: TestParams, mlf_cfg: MLFlowConf
     ) -> TestSummary:
-        """Run an evaluation for the model (via MLFlow) and log the model prediction
-        result as an MLFlow artifact.
+        """Run an evaluation for the model and log the prediction result as an MLFlow
+        artifact.
         """
 
         mlf_cfg.expose_auth_to_env()
@@ -116,7 +118,7 @@ class Tester:
             mlflow.log_input(dataset, context = params.context)
             # To save it as a file too, we need to call log_table separately
             # The saved file can be loaded for drift monitoring purpose later
-            mlflow.log_table(df.to_pandas(), 'prediction.json')
+            mlflow.log_table(df.to_pandas(), 'prediction.parquet')
             # Also log the params, just like when training
             mlflow.log_params(params.model_dump())
 
@@ -146,10 +148,21 @@ class Tester:
     def search_evaluation(
         ref_commit_id: str, summary: TestSummary, mlf_cfg: MLFlowConf
     ) -> str | None:
-        """Search an existing evaluation run which match a certain criteria, such as
-        the name of the metric used, and the specific commit id. If there are multiple
-        runs that matches the criteria, only the run id with the best metric score will
-        be returned.
+        """Search an existing evaluation run based on the commit id and metric info,
+        typically for drift monitoring purpose.
+
+        Args:
+            ref_commit_id: Data commit id that was used in the existing (previous)
+                evaluation run.
+            summary (TestSummary): Result of a recent test/evaluation run, containing
+                the metric info used for that test. Used to ensure compatibility
+                between the recent test and the previous test we're trying to find.
+            mlf_cfg (MLFlowConf): The required MLFlow credentials for searching the
+                existing run.
+
+        Returns:
+            Any: The evaluation run id or None (if not found). If there are multiple
+                runs found, only the run id with the best metric score will be returned.
         """
 
         mlf_cfg.expose_auth_to_env()
@@ -175,13 +188,10 @@ class Tester:
 
     @staticmethod
     def load_prediction(
-        run_id: str, mlf_cfg: MLFlowConf, artifact_path: str = 'prediction.json',
+        run_id: str, mlf_cfg: MLFlowConf, artifact_path: str = 'prediction.parquet',
         error_ok: bool = False
     ) -> pl.DataFrame | None:
-        """Load the prediction result from an existing evaluation run, assuming the run
-        id is already known beforehand. This is preferred over re-running the same
-        evaluation again, which can be expensive and slow depending on the model.
-        """
+        """Load the prediction result from an existing evaluation run."""
 
         if error_ok and not run_id:
             return None

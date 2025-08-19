@@ -1,4 +1,5 @@
 import uuid
+import mlflow
 import tempfile
 import polars as pl
 
@@ -6,17 +7,17 @@ import torch
 from lightning import Fabric
 from pawpaw.ml.model import PawDataLoader
 
-import mlflow
-from pawpaw.pydantic.common import MLFlowConf
-from pawpaw.pydantic.train_test import TestParams, MLFlowModel
-
-from pawpaw.pydantic.serve import ServeRequest, ServeResponse, ModelInfo
+from pawpaw.pydantic_.common import MLFlowConf
+from pawpaw.pydantic_.train_test import TestParams, MLFlowModel
+from pawpaw.pydantic_.serve import ServeRequest, ServeResponse, ModelInfo
 
 
 class Server:
-    """Helper class to easily load the best model from MLFlow, which then can be used
-    for predicting pet pawpularity. The loaded model can be served via FastAPI or
-    similar libraries.
+    """Helper class to easily load the best (pet pawpularity) model from MLFlow.
+     
+    The loaded model can be served via FastAPI or similar libraries. To use it for 
+    prediction, use the `predict` function. The `reload` function can also be used to 
+    reload/switch the currently used model.
     """
 
     def __init__(self, params: TestParams, mlf_model: MLFlowModel, mlf_cfg: MLFlowConf):
@@ -34,17 +35,12 @@ class Server:
         mlflow.set_tracking_uri(mlf_cfg.tracking_uri)
         client = mlflow.MlflowClient()
 
-        print(f'Getting the best model version from "{mlf_model.model_registry_name}"')
-        alias = mlf_model.best_version_alias
-
         # Try getting the best model using a version alias
-        # If we don't have it yet, an error will be raised
+        # If we don't have the model yet, an error will be raised
         version = client.get_model_version_by_alias(
             mlf_model.model_registry_name,
-            alias = alias
+            alias = mlf_model.best_version_alias
         )
-
-        print(f'Alias "{alias}" is tied to model version "{version.version}"')
 
         return ModelInfo(
             source = version.source,
@@ -64,9 +60,7 @@ class Server:
         return model
 
     def reload(self, mlf_model: MLFlowModel, mlf_cfg: MLFlowConf):
-        """Reload the served model using an optimistic approach (by assuming no error
-        will ever occur).
-        """
+        """Re-fetch the best model from MLFlow (to use for prediction)."""
 
         # There might be a very little downtime when switching the model here
         self.model_info = self.__get_best_model_version(mlf_model, mlf_cfg)
@@ -110,3 +104,8 @@ class Server:
             model = self.model_info,
             result = preds
         )
+
+    def cleanup(self):
+        """Clean up the directory used for storing the uploaded images."""
+
+        self.img_dir.cleanup()
