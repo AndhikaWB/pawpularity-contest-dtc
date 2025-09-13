@@ -1,8 +1,8 @@
-import dotenv
 import tempfile
-from pathlib import Path
-from pawpaw import logger
 from copy import deepcopy
+
+import pawpaw
+from pawpaw import logger
 
 import mlflow
 from pawpaw.ml.trainer import Trainer
@@ -148,11 +148,6 @@ def run(
 
 
 def main():
-    dotenv.load_dotenv(
-        '.env.prod' if Path('.env.prod').exists() else '.env.dev',
-        override = False
-    )
-
     class ParseArgs(BaseSettings):
         """Train a model using data sourced from S3."""
 
@@ -162,7 +157,7 @@ def main():
             validate_assignment = True
         )
 
-        data_source_repo: str = Field(alias = 'TRAIN_DATA_SOURCE')
+        data_source_repo: str = Field(validation_alias = 'TRAIN_DATA_SOURCE')
         data_source_creds: LakeFSConf = Field(default_factory = LakeFSConf)
 
         train_params: TrainParams = Field(default_factory = TrainParams)
@@ -172,6 +167,7 @@ def main():
         mlflow_creds: MLFlowConf = Field(default_factory = MLFlowConf)
 
     args = ParseArgs()
+    pawpaw.enable_logging()
 
     run(
         args.data_source_repo, args.data_source_creds,

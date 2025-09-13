@@ -1,6 +1,3 @@
-# Bypass line length limit
-# ruff: noqa: E501
-
 import re
 from typing import Annotated
 from datetime import datetime
@@ -14,10 +11,10 @@ class ReportConf(BaseSettings):
 
     model_config = SettingsConfigDict(validate_by_name = True, validate_default = False, extra = 'allow')
 
-    host: Annotated[str, Field(validation_alias = 'REPORT_DB_HOST')] = 'http://localhost:5432'
-    database: Annotated[str, Field(validation_alias = 'REPORT_DB_DATABASE')]
-    username: Annotated[str, Field(validation_alias = 'REPORT_DB_USERNAME')]
-    password: Annotated[str, Field(validation_alias = 'REPORT_DB_PASSWORD')]
+    host: Annotated[str, Field(validation_alias = 'REPORT_DATABASE_HOST')] = 'http://localhost:5432'
+    database: Annotated[str, Field(validation_alias = 'REPORT_DATABASE_DBNAME')]
+    username: Annotated[str, Field(validation_alias = 'REPORT_DATABASE_USERNAME')]
+    password: Annotated[str, Field(validation_alias = 'REPORT_DATABASE_PASSWORD')]
 
     def postgresql_uri(self) -> str:
         """Return as PostgreSQL connection URI."""

@@ -1,11 +1,9 @@
 import io
-import dotenv
 from PIL import Image
-from pathlib import Path
+import streamlit as st
 
 import requests
-import streamlit as st
-from pawpaw.pydantic_.serve import ServeConf, ServeRequest, ServeResponse
+import pawpaw.pydantic_.server as srv
 
 
 def image_section(features: dict[str, str]):
@@ -81,7 +79,7 @@ def result_section(
                     'happening, please report this to the administrator.'
                 )
             elif response.status_code == 200:
-                pred_result = ServeResponse(**response.json())
+                pred_result = srv.ServerResponse(**response.json())
                 pred_result = round(pred_result.result)
                 pred_text = f'{pred_result} out of 100'
 
@@ -117,13 +115,8 @@ def result_section(
 
 
 def main():
-    dotenv.load_dotenv(
-        '.env.prod' if Path('.env.prod').exists() else '.env.dev',
-        override = False
-    )
-
-    model_endpoint = ServeConf().model_endpoint
-    model_fields = ServeRequest.model_fields
+    model_endpoint = srv.ServerConf().model_endpoint
+    model_fields = srv.ServerRequest.model_fields
 
     features = {
         # Get all image features and the description
@@ -135,5 +128,5 @@ def main():
     result_section(model_endpoint, img_uploaded, features_selected)
 
 
-if __name__ == '__main__':
+if __name__ == '__main__':    
     main()

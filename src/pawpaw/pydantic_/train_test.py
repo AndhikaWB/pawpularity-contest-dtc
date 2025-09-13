@@ -1,6 +1,3 @@
-# Bypass line length limit
-# ruff: noqa: E501
-
 from datetime import datetime
 from typing import Annotated, ClassVar
 
@@ -34,7 +31,7 @@ class MLFlowModel(BaseSettings):
     @computed_field
     @property
     def model_registry_name(self) -> str:
-        """Return the environment together with the model name (e.g. `dev.model_name`).
+        """Return the environment together with the model name (e.g. `dev.my_model`).
         This is the suggested way by MLFlow for registering a model.
         """
 
@@ -82,7 +79,7 @@ class TrainParams(BaseSettings):
     seed: Annotated[int, Field(validation_alias = 'TRAIN_SEED')] = 1337
     lr: Annotated[float, Field(ge = 0.00, validation_alias = 'TRAIN_LR')] = 0.001
     batch_size: Annotated[int, Field(ge = 1, validation_alias = 'TRAIN_BATCH_SIZE')] = 64
-    epochs: Annotated[int, Field(ge = 1, validation_alias = 'TRAIN_EPOCH')] = 1
+    epochs: Annotated[int, Field(ge = 1, validation_alias = 'TRAIN_EPOCH')] = 20
     patience: Annotated[int, Field(ge = 1, validation_alias = 'TRAIN_PATIENCE')] = 5
 
     # To filter from other types of run
@@ -127,6 +124,9 @@ class TrainSummary(BaseModel):
     data_commit_id: str
     model_uri: str
 
+    # For generating materialization info on Prefect
+    model_id: str | None
+
     metric: str
     metric_min: bool
     score: float
@@ -143,6 +143,9 @@ class TestSummary(BaseModel):
     run_id: str
     data_commit_id: str
     model_uri: str
+
+    # For generating materialization info on Prefect
+    model_id: str | None
 
     model_version: str
     model_registry_name: str

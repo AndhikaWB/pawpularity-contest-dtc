@@ -1,0 +1,56 @@
+# Todo
+
+- (✅ Done) Migrate from `dotenv` for importing the environment variables
+    - Don't rely on `dotenv` since some libraries read those variables at import time, before `dotenv.load_env` can be called. Also, using `dotenv` is redundant because when deploying, the envs can be set via Docker directly
+    - FastAPI and Streamlit apps also may not use the `if __name__ == "__main__"` block which is usually the place to call `dotenv.load_env`
+    - The most popular solution seems to be using [direnv](https://direnv.net/) (hooking the shell directly)
+- Research agnostic way to store and pass secret and environment variables in the pipeline
+    - By agnostic, I mean that the method should also work if I run it without Prefect/Airflow, and/or can be migrated easily between Prefect and Airflow
+    - I consider using monkey patching for this (e.g. use the same API as used by Prefect, but using my own implementation when not running on Prefect)
+- (❎) Check backward compatibility with MLFlow 2
+    - This is optional, but many companies are probably still using MLFlow 2, so it may be worth investigating
+    - Currently, the training and evaluation process relies on "logged model", which allows saving model per step (without nested runs) and has expanded search filters, but not available on MLFlow 2
+    - Also, on MLFlow 3, each newly saved model will have a model URI (instead of artifact URI which is used on MLFlow 2). Hence, treatment for old model and new model may differ due to the URI difference
+- (❎) Model promotion
+    - Model promotion is currently not handled (the model just stays on `dev.model-name` registry forever)
+    - When using MLFlow, a model can simply be promoted to a separate registry (e.g. from `dev.model-name` to `prod.model-name`) once it passed validation, because training new model on each registry stage may be expensive
+    - Need to research on what are the triggers for model promotion, and how to handle the passing, and also:
+        - Should the new registry name also be saved to `.env` file?
+        - What if there are multiple promotion (e.g. from dev to staging to prod)?
+        - Should the registry name for each stage be saved to `.env` file? Separate variables or just one variable (comma separated)?
+- (❎) Standardize the model API (and other things) to be more reusable across projects
+    - See [this Tokopedia post](https://medium.com/@hafizhan.aliady/what-i-learned-as-tokopedia-mlops-expert-on-how-we-manage-machine-learning-platform-12798ea93270) for reference, and see [this docs](https://mlflow.org/docs/latest/ml/model/signatures/) for migrating to `mlflow.pyfunc`
+    - There are also some interesting references from [other participants](https://courses.datatalks.club/mlops-zoomcamp-2025/project/project2/list), like how some of them modeled the code into api, data, and models (kinda like MVC pattern). However, this may may actually be too limiting for ML projects and should be reviewed carefully
+    - By using a standardized API, it allows us using various ML library (e.g. Sklearn, PyTorch), and data input type (e.g. mixed between tabular and image data) without relying too much on MLFlow built-in capability
+    - For context, the built-in capability of MLFlow is often frustrating. E.g. when using `mlflow.evaluate` on a logged PyTorch model, it will only allow certain input types. If I pass a dataframe column containing 2D arrays (of images), MLFlow will throw a tantrum as if it's unsupported (even though the `log_input` accepted it just fine during training)
+- (❎) Portable model serialization and loading
+    - MLFlow uses pickle by default and has no plan to change that
+    - The problem with pickle is that it relies on path, so simply changing your project structure like `src/name/ml/model.py` to `name/ml/model.py` will break the saved model so the old path no longer exist
+    - Also, it means that pickle will use/load the new code in that path instead of using the old code that was used to serialize the model. This is very problematic and god knows how many changes have been made since then
+    - Tying the Git commit to the model may be good but that means every trained model must be on a commited code, which is not always the case (there may be uncommited changes)
+    - This [docs](https://mlflow.org/docs/latest/ml/model/dependencies/) mentioned using a custom `code_paths`, and this [issue](https://github.com/mlflow/mlflow/issues/1468) said that you can avoid pickle by using `mlflow.pyfunc`
+    - Using [KitOps](https://kitops.org) (CNCF project) or unifying the libraries like what Tokopedia did may also be a solution
+    - There's also Torch JIT but not sure how portable it's, and it's not a universal solution (can't be used on Sklearn or other libraries). Compiling to Torch JIT is also slow
+- (❎) Change from ETL to ELT
+    - For this to work, all data must be directly uploaded to S3 first (no sampling or transformation)
+    - This will ensure parallel task work in Prefect, since transformation will be done on-the-fly from the S3 later, rather than saving result to a local directory first
+    - Subsequent transformations will also be much faster (after the slow initial upload), because lakeFS can just use the file pointer or copy-on-write approach when making new commit
+- (❎) Make pipeline output/asset path as part of the input argument
+    - Currently, Airflow and Prefect don't support automatically making output as asset, so we need to rely on the input argument
+    - I'm using a custom decorator as workaround, but this is considered a hacky approach and can break anytime
+- (❎) Don't rely too much on data commit id
+    - Figure out ways to make it more flexible, not only by looking the previous commit (since there might be minor commits like fixing typo)
+    - Also a better way check whether that commit already has an evaluation or not, without querying to MLFlow first (or at least a way to view them all in table directly). Maybe just simply separating the experiment name between training and evaluation will do?
+- (❎) Embedding store for the model recommendation system
+    - I'm thinking of using either Milvus (CNCF project) or pgvector (also check pgvectorscale)
+    - Maybe use [Feast](https://github.com/feast-dev/feast) to minimize code change if I ever decided to switch the vector database
+    - Figure out how to manage the embedding version, since old embedding may be incompatible with embedding from the newer model (recommendation mismatch)
+        - Is saving new embedding vector per new model version actually a wise approach?
+        - What about the cumulated size, e.g. after 500 different versions, there would be 500 different embedding vectors for each image?
+        - What to do with old embedding vector? Just discard it when the same image is also available on the new embedding vector? What if it's needed and pretty close to other image that is not available on the new embedding?
+- (❎) Better secret management
+    - Don't pass secret between tasks as parameter. This is actually pretty easy, but kinda demotivating to do the rewrite
+    - Passing secret between functions on the lower code may be fine since it's only passed locally, but between tasks (over the network) is considered dangerous
+    - Use `SecretStr` and implement `dump_with_secret` function on the Pydantic model?
+- (❎) Explore dbt/SQLMesh to standardize the SQL input-output process, rather than hiding it somewhere deep in my code, which I may forget where in the future
+    - However, I think it's not needed for this project, as the transformation used is too simple for dbt/SQLMesh to be valuable

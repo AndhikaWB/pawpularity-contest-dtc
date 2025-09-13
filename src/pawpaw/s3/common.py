@@ -1,7 +1,8 @@
-from tqdm import tqdm
-from concurrent import futures
 from urllib.parse import urlparse
 from pathlib import Path, PurePosixPath
+
+from tqdm import tqdm
+from concurrent import futures
 
 import boto3
 from botocore.exceptions import ClientError

@@ -1,12 +1,15 @@
-import dotenv
 import polars as pl
-from tqdm import tqdm
-from pathlib import Path
-from pawpaw import logger
 from random import randint
 from datetime import datetime
-from concurrent import futures
+
+from pathlib import Path
 from shutil import copyfile, rmtree
+
+from tqdm import tqdm
+from concurrent import futures
+
+import pawpaw
+from pawpaw import logger
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -114,11 +117,11 @@ def commit_data(repo_id: str, branch: str, lfs_cfg: LakeFSConf) -> str:
 
 def run(
     source_dir: str, target_dir: str, source_creds: S3Conf | None,
-    target_creds: LakeFSConf, seed: int
+    target_creds: LakeFSConf, sample: int, seed: int
 ):
     # Download and preprocess data from a local or S3 storage
     local_dir = pull_data(source_dir, 'data/raw', source_creds)
-    preproc_dir = preproc_data(local_dir, 'data/preprocessed', seed = seed)
+    preproc_dir = preproc_data(local_dir, 'data/processed', sample, seed)
 
     # Purge the existing remote data before uploading again
     purge_remote_data(target_dir, target_creds.as_s3())
@@ -132,35 +135,40 @@ def run(
 
 
 def main():
-    dotenv.load_dotenv(
-        '.env.prod' if Path('.env.prod').exists() else '.env.dev',
-        override = False
-    )
-
     class ParseArgs(BaseSettings):
         """Preprocess data to be used for model training or testing."""
 
         model_config = SettingsConfigDict(
             cli_parse_args = True,
             cli_kebab_case = True,
-            validate_by_name = True
+            validate_assignment = True
         )
 
-        source_dir: str = Field(alias = 'RAW_DATA_SOURCE')
-        target_dir: str = Field(alias = 'TRAIN_DATA_SOURCE')
+        source_dir: str = Field(validation_alias = 'RAW_DATA_SOURCE')
+        target_dir: str = Field(validation_alias = 'TRAIN_DATA_SOURCE')
         source_creds: S3Conf | None = Field(default_factory = ValidOrNone(S3Conf))
         target_creds: LakeFSConf = Field(default_factory = LakeFSConf)
 
+        # Sample size to take from the raw data
+        sample: int = Field(
+            validation_alias = 'PREPROCESS_SAMPLE',
+            ge = 10, default = 2000
+        )
+
         # We can simulate streaming/monthly data by using random seed
         # However, complete uniqueness can't guaranteed from each seed
-        seed: int = Field(default_factory = lambda: randint(1, 9999))
+        seed: int = Field(
+            validation_alias = 'PREPROCESS_SEED',
+            default_factory = lambda: randint(1, 9999)
+        )
 
     args = ParseArgs()
+    pawpaw.enable_logging()
 
     run(
         args.source_dir, args.target_dir,
         args.source_creds, args.target_creds,
-        args.seed
+        args.sample, args.seed
     )
 
 

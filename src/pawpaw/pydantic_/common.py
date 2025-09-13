@@ -1,6 +1,3 @@
-# Bypass line length limit
-# ruff: noqa: E501
-
 import os
 from typing import Annotated
 
@@ -36,7 +33,7 @@ class ValidOrNone:
 class S3Conf(BaseSettings):
     # BUG: If both params and env variables exist, the final value may be inconsistent
     # We should check this by comparing "my_var.key" with "my_var.model_dump()[key]"
-    model_config = SettingsConfigDict(validate_by_name = True, validate_by_alias = False, extra = 'allow')
+    model_config = SettingsConfigDict(validate_by_name = True, validate_default = False, extra = 'allow')
     
     endpoint_url: Annotated[str, Field(alias = 'AWS_ENDPOINT_URL')] = 'http://localhost:9000'
     aws_access_key_id: Annotated[str, Field(alias = 'AWS_ACCESS_KEY_ID')]

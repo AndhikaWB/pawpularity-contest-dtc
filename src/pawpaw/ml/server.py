@@ -1,5 +1,4 @@
 import uuid
-import mlflow
 import tempfile
 import polars as pl
 
@@ -7,9 +6,10 @@ import torch
 from lightning import Fabric
 from pawpaw.ml.model import PawDataLoader
 
+import mlflow
 from pawpaw.pydantic_.common import MLFlowConf
 from pawpaw.pydantic_.train_test import TestParams, MLFlowModel
-from pawpaw.pydantic_.serve import ServeRequest, ServeResponse, ModelInfo
+from pawpaw.pydantic_.server import ServerRequest, ServerResponse, ModelInfo
 
 
 class Server:
@@ -52,7 +52,7 @@ class Server:
         mlf_cfg.expose_auth_to_env()
         mlflow.set_tracking_uri(mlf_cfg.tracking_uri)
 
-        fabric = Fabric(accelerator = 'gpu')
+        fabric = Fabric(accelerator = 'auto')
         model = mlflow.pytorch.load_model(model_uri)
         model = fabric.setup_module(model)
         model.eval()
@@ -66,7 +66,7 @@ class Server:
         self.model_info = self.__get_best_model_version(mlf_model, mlf_cfg)
         self.model = self.__load_model(self.model_info.source, mlf_cfg)
 
-    def predict(self, req: ServeRequest) -> ServeResponse:
+    def predict(self, req: ServerRequest) -> ServerResponse:
         # Save the uploaded image in a directory
         file_name = uuid.uuid4().hex
         with open(f'{self.img_dir.name}/{file_name}.jpg', 'wb') as f:
@@ -84,7 +84,7 @@ class Server:
             img_size = self.params.img_size
         )
 
-        fabric = Fabric(accelerator = 'gpu')
+        fabric = Fabric(accelerator = 'auto')
         loader = fabric.setup_dataloaders(loader)
 
         preds = torch.cat([
@@ -100,7 +100,7 @@ class Server:
         # There can only one row/image for now
         preds = preds[0] if len(preds) == 1 else preds
 
-        return ServeResponse(
+        return ServerResponse(
             model = self.model_info,
             result = preds
         )

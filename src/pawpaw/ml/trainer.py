@@ -6,6 +6,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 from lightning import Fabric
 import torchmetrics as tm
+from pawpaw.ml.utils import LossMetric, EarlyStopping, QSave
 
 import mlflow
 from mlflow.data.meta_dataset import MetaDataset
@@ -13,7 +14,6 @@ from mlflow.types import Schema, ColSpec, DataType
 from mlflow.data.http_dataset_source import HTTPDatasetSource
 
 from pawpaw.pydantic_.common import MLFlowConf
-from pawpaw.ml.utils import LossMetric, EarlyStopping, QSave
 from pawpaw.pydantic_.train_test import TrainParams, TrainSummary
 
 
@@ -62,9 +62,9 @@ class Trainer:
 
         # ----------
 
-        # Initiate Lightning Fabric with GPU accelerator
+        # Initiate Lightning Fabric to use GPU (if available)
         # Without this, we have to call "to_device" everywhere
-        self.fabric = Fabric(accelerator = 'gpu')
+        self.fabric = Fabric(accelerator = 'auto')
 
         # Set all tensors on these objects to use GPU by wrapping them as Fabric classes
         # Once wrapped, the class name and some of its properties will change too
@@ -205,7 +205,7 @@ class Trainer:
                     _optimizer = self.optimizer.optimizer
 
                     model_info = mlflow.pytorch.log_model(
-                        torch.jit.script(_model),
+                        _model,
                         name = _model.__class__.__name__,
                         step = epoch,
                         signature = mlflow.models.infer_signature(
@@ -286,18 +286,19 @@ class Trainer:
             for i in logged_models[1:]:
                 client.delete_logged_model(i.model_id)
 
-        # Get the best model URI from this run
-        best_model_uri = logged_models[0].model_uri
+        # Get the best model from this run
+        best_model = logged_models[0]
         # Also get the specific metric score tied to that model
         # TODO: Check behavior if the model is tied with more than 1 epoch
-        for metric in reversed(logged_models[0].metrics):
+        for metric in reversed(best_model.metrics):
             if metric.key == params.monitor:
                 metric_value = metric.value
 
         return TrainSummary(
             run_id = run_id,
             data_commit_id = params.data_commit_id,
-            model_uri = best_model_uri,
+            model_uri = best_model.model_uri,
+            model_id = best_model.model_id,
             metric = params.monitor,
             metric_min = params.monitor_min,
             score = metric_value

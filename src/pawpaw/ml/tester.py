@@ -69,7 +69,7 @@ class Tester:
             cache_dir = cache_dir.name
         )
 
-        fabric = Fabric(accelerator = 'gpu')
+        fabric = Fabric(accelerator = 'auto')
         test_loader = fabric.setup_dataloaders(test_loader)
 
         # TODO: Use pyfunc to support all MLFlow model flavours
@@ -136,6 +136,7 @@ class Tester:
             run_id = result.run_id,
             data_commit_id = params.data_commit_id,
             model_uri = self.model_uri,
+            model_id = self.model_id,
             model_version = self.model_version,
             model_registry_name = self.model_name,
             metric = params.metric,

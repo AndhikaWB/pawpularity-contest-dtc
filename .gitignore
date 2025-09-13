@@ -3,6 +3,9 @@ __pycache__/
 /.pytest_cache/
 /.venv/
 
+# Sensitive stuff
+/.env
+
 # Data folder
 /data/*
 !/data/raw/data.csv
@@ -11,8 +14,7 @@ __pycache__/
 # Temporary folder
 /model/
 
-# Docker shared volumes
-/docker/*
-!/docker/init
-!/docker/.env.dev
-!/docker/compose.yaml
+# Docker compose services data
+/infra/docker-services/*
+!/infra/docker-services/init
+!/infra/docker-services/compose.*
