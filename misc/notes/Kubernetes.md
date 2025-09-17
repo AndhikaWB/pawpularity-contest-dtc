@@ -2,7 +2,7 @@
 
 Docker provides local Kubernetes cluster support by using Kubeadm by default. However, it's still considered heavy to use for laptop users. As an alternative, I'm using Minikube, which is the default one used on Kubernetes [getting started guide](https://kubernetes.io/docs/tutorials/kubernetes-basics/create-cluster/cluster-intro/).
 
-See all list of official Kubernetes cluster manager [here](https://kubernetes.io/docs/tasks/tools/). There are also other non-official alternatives as well, like [MicroK8s](https://github.com/canonical/microk8s) (maintained by Canonical).
+See all list of official Kubernetes cluster manager [here](https://kubernetes.io/docs/tasks/tools/). There are also other non-official alternatives as well, like [MicroK8s](https://github.com/canonical/microk8s) and [k3s](https://k3s.io/).
 
 ## Prerequisites
 - WSL

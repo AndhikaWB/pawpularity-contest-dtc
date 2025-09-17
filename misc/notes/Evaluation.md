@@ -154,6 +154,7 @@ Here's the bad news though:
   figure.show()
   ```
 - I just learned that it has been recently acquired by Soda (yes, the same Soda that I reviewed earlier), so their future is a bit unclear. Besides, I'm not a fan of the UI first approach that Soda currently uses
+- Also, after using it, turns out NannyML requires PyTorch as dependency. This is may be bloat the environment unless you use PyTorch already
 
 ## Alibi Detect (by Seldon)
 
