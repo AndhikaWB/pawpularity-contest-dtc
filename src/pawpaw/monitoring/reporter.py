@@ -157,7 +157,7 @@ class Reporter:
                     # The average drift/score/error value of all chunks
                     value_average = value_col.mean(),
                     # Value threshold to be considered dangerous
-                    value_threshold = thres_col.item(),
+                    value_threshold = thres_col[0],
                     # The number of safe/alerting chunks
                     safe_count = safe_count,
                     alert_count = alert_count,

@@ -175,7 +175,7 @@ def generate_report(
 
     if isinstance(ref_df, pl.DataFrame):
         # Generate the drift report and write it to a database
-        report_df = reporter.generate_report(ref_run_id, ref_commit_id, ref_df, summary)
+        report_df = reporter.generate_report(ref_run_id, ref_commit_id, ref_df)
         reporter.write_report_to_db(report_df, table_name, report_cfg)
         logger.info(f'Written report to database table "{table_name}"')
         return True

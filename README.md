@@ -4,7 +4,7 @@ Ever wondered how cute your pet is compared to other people's pet? Say no more! 
 
 The original goal if this project is to ease the process of pet adoption, by using the ML model, volunteers can take the best possible photo of their pet, and receive feedback from the model so they can change the pose, etc. to increase the pawpularity score. 
 
-However, this feedback based solution is currently not completed yet (the embedding and vector store part). So, only the pawpularity score will be outputted for now.
+However, this feedback based solution is currently not completed yet, so only the pawpularity score will be outputted for now. (I still need to research the best approach to manage the embedding/vector store, which is crucial for the recommender system).
 
 ## Screenshots
 
@@ -33,7 +33,7 @@ However, this feedback based solution is currently not completed yet (the embedd
 
 ### Data Availability
 
-The data is part of this [Kaggle competition](https://www.kaggle.com/c/petfinder-pawpularity-score/data), and I already received permission from PetFinder.my to use it in this project (I sent them an email).
+The data is part of this [Kaggle competition](https://www.kaggle.com/c/petfinder-pawpularity-score/data), and I already received permission from [PetFinder.my](https://www.petfinder.my/) to use it in this project (I sent them an email).
 
 The original CSV is already included in this repo, and has been renamed from `train.csv` to `data.csv` to avoid confusion with data from the data preprocessing step later.
 
@@ -41,7 +41,7 @@ Still, you need to download the image files from Kaggle by yourself. I'm not inc
 
 ### Performance
 
-There's only 1 model variant used in the project, the baseline model (simple CNN), which achieved RMSE of 0.20 (meaning that the prediction missed by 20 points on average). For comparison, the current best model on Kaggle achieved RMSE of 0.17.
+There's only 1 model variant used in the project, the baseline model (simple CNN), which achieved RMSE of 0.20 (meaning that the prediction missed by 20 points on average). For comparison, the current best model on Kaggle achieved RMSE of ~0.17.
 
 ## Architecture
 
