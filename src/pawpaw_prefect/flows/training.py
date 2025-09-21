@@ -17,7 +17,7 @@ t.register_model = lazym(
 
 
 # Will be called from the evaluation script
-@flow(name = 'Model Training')
+@task(name = 'Model Training')
 def run(*args, **kwargs):
     # Don't call this function directly, use an outer function instead
     # Due to Python quirks, calling directly won't apply previous patches

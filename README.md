@@ -4,7 +4,7 @@ Ever wondered how cute your pet is compared to other people's pet? Say no more! 
 
 The original goal if this project is to ease the process of pet adoption, by using the ML model, volunteers can take the best possible photo of their pet, and receive feedback from the model so they can change the pose, etc. to increase the pawpularity score. 
 
-However, this feedback based solution is currently not completed yet, so only the pawpularity score will be outputted for now. (I still need to research the best approach to manage the embedding/vector store, which is crucial for the recommender system).
+However, this feedback based solution is currently not completed yet, so only the pawpularity score will be outputted for now. (I still need to research the best approach to manage the embedding/vector store, see TODO.md).
 
 ## Screenshots
 
@@ -66,6 +66,56 @@ There's only 1 model variant used in the project, the baseline model (simple CNN
 |Streamlit|The prettier web app that can also be used to submit the prediction request. Not a standalone, must run side-by-side with the model server|
 |Ruff|Code linter and formatter. Currently, I use it side-by-side with Pyright, and to avoid redundancy, only some rules are enabled|
 |Uv|The awesome Python package manager, no need to call `source .venv/bin/activate` and other trivial stuff explicitly again|
+
+### Directory Structure
+
+```
+├─ 🗀 data
+│  ├─ 🗀 processed                 : Temporary folder for storing preprocessed data
+│  └─ 🗀 raw
+│     ├─ 🗀 images
+│     └─ data.csv
+├─ 🗀 infra
+│     ├─ 🗀 docker-deployment      : Docker images for deployment
+|     │  ├─ override.env           : Environment variable overrides for the Docker images
+|     |  ├─ server.Dockerfile
+|     |  ├─ webapp.Dockerfile
+|     |  └─ workflow.Dockerfile
+│     └─ 🗀 docker-services        : The necessary Docker compose services to run
+|        ├─ 🗀 init                : Config files for services initialization
+|        ├─ compose.env            : Environment variables for the Docker services
+|        └─ compose.yaml
+├─ 🗀 notebooks                    : Experimental notebooks used when prototyping stuff
+├─ 🗀 src
+│     ├─ 🗀 pawpaw
+|     │  ├─ 🗀 ml                  : Abstraction/helper scripts for ML stuff
+|     │  │  ├─ model.py
+|     │  │  ├─ server.py
+|     │  │  ├─ tester.py
+|     │  │  ├─ trainer.py
+|     │  │  ├─ utils.py
+|     |  ├─ 🗀 monitoring
+|     │  │  └─ reporter.py
+|     |  ├─ 🗀 pydantic_           : Pydantic model definitions (not ML model)
+|     |  ├─ 🗀 s3
+|     |  ├─ evaluation.py          : The main script for model evaluation
+|     |  ├─ preprocess.py          : The main script for data preprocessing
+|     |  ├─ server.py              : The main script for model prediction server
+|     |  ├─ training.py            : The main script for model training (used in model evaluation)
+|     |  └─ webapp.py              : The main script for web app (UI for prediction server)
+│     └─ 🗀 pawpaw_prefect/
+|        ├─ 🗀 flows               : Patched main scripts to make it work with Prefect effortlessly
+|        │  ├─ evaluation.py
+|        │  ├─ preprocess.py
+|        │  └─ training.py
+|        ├─ 🗀 pydantic_           : Pydantic model definitions (not ML model)
+|        ├─ 🗀 utils               : Patcher code that is used to patch the main scripts
+|        └─ deploy.py              : For deploying the Prefect flows
+├─ 🗀 tests
+├─ .env.example                    : Environment variables mostly for the client side (rename as .env)
+├─ Makefile
+└─ pyproject.toml                  : Python dependencies and other stuff
+```
 
 ### Services Port
 

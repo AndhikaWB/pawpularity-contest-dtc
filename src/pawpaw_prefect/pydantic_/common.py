@@ -5,7 +5,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class DeployConf(BaseSettings):
-    """Used when serving/deploying flow to Prefect remote server."""
+    """Used when serving/deploying flow to Prefect remote server.
+
+    Args:
+        environment (str, optional): Environment name to use alongside the raw
+            deployment name. Defaults to 'dev'.
+        raw_deployment_name (str): Name for the deployment (there can be multiple
+            workflows assigned to one deployment). For a better practice, please use
+            `deployment_name` instead, it adds the environment before the raw deployment
+            name (e.g. `dev.deployment_name`).
+    """
 
     model_config = SettingsConfigDict(validate_by_name = True, validate_default = False, extra = 'allow')
 

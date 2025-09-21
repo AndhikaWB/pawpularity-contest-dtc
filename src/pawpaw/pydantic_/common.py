@@ -29,8 +29,24 @@ class ValidOrNone:
         except ValidationError:
             pass
 
+# -----
+
+# The classes attributes here are named exactly like that so that they can be dumped
+# easily to the respective SDK functions when needed. The inconsistent naming is due
+# to the different parameters expected by each SDK, not because I'm sloppy.
+
+# -----
+
 
 class S3Conf(BaseSettings):
+    """Generic S3 config.
+
+    Args:
+        endpoint_url (str): Endpoint URL. Defaults to 'http://localhost:9000'.
+        aws_access_key_id (str): Access key id.
+        aws_secret_access_key (str): Secret access key.
+    """
+
     # BUG: If both params and env variables exist, the final value may be inconsistent
     # We should check this by comparing "my_var.key" with "my_var.model_dump()[key]"
     model_config = SettingsConfigDict(validate_by_name = True, validate_default = False, extra = 'allow')
@@ -41,6 +57,14 @@ class S3Conf(BaseSettings):
 
 
 class MinIOConf(BaseSettings):
+    """MinIO S3 config.
+
+    Args:
+        endpoint (str): Endpoint URL. Defaults to 'http://localhost:9000'.
+        access_key (str): User id (access key id).
+        secret_key (str): Password (secret access key).
+    """
+
     model_config = SettingsConfigDict(validate_by_name = True, validate_default = False, extra = 'allow')
 
     # MinIO actually doesn't read any environment variable to set the endpoint URL
@@ -59,6 +83,14 @@ class MinIOConf(BaseSettings):
 
 
 class LakeFSConf(BaseSettings):
+    """lakeFS config (for data versioning on top of S3).
+
+    Args:
+        host (str): Endpoint URL. Defaults to 'http://localhost:8000'.
+        username (str): Username (access key id).
+        password (str): Password (secret access key).
+    """
+
     model_config = SettingsConfigDict(validate_by_name = True, validate_default = False, extra = 'allow')
 
     host: Annotated[str, Field(validation_alias = 'LAKECTL_SERVER_ENDPOINT_URL')] = 'http://localhost:8000'

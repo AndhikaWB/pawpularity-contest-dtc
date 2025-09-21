@@ -15,7 +15,7 @@ class MLFlowModel(BaseSettings):
         raw_model_name (str): Name to use when registering or searching a model. Each
             time we register a model under this name, it will be added as a new model
             version. For a better practice, please use `model_registry_name` instead, it
-            adds the environment before the raw model name.
+            adds the environment before the raw model name (e.g. `dev.model_name`).
         best_version_alias (str, optional): Alias for the best model version. Used to
             differentiate it from other model version, and for easy model loading later.
             Defaults to 'best'.
@@ -41,6 +41,9 @@ class MLFlowModel(BaseSettings):
 class TestParams(BaseSettings):
     """Parameters that will be used to configure the testing/evaluation process (and
     logged to MLFlow). Can also be used to serve a model.
+
+    These info includes the metric name, metric threshold, data commit id, image source,
+    image size, etc.
     """
 
     model_config = SettingsConfigDict(validate_by_name = True, validate_default = False, extra = 'allow')
@@ -70,6 +73,9 @@ class TestParams(BaseSettings):
 class TrainParams(BaseSettings):
     """Parameters that will be used to configure the training process (and logged to
     MLFlow).
+
+    These info includes the image size, max epoch, batch size, data commit id, image
+    source, criterion name, metric to monitor, etc.
     """
 
     model_config = SettingsConfigDict(validate_by_name = True, validate_default = False, extra = 'allow')

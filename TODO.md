@@ -4,9 +4,6 @@
     - Don't rely on `dotenv` since some libraries read those variables at import time, before `dotenv.load_env` can be called. Also, using `dotenv` is redundant because when deploying, the envs can be set via Docker directly
     - FastAPI and Streamlit apps also may not use the `if __name__ == "__main__"` block which is usually the place to call `dotenv.load_env`
     - The most popular solution seems to be using [direnv](https://direnv.net/) (hooking the shell directly)
-- Research agnostic way to store and pass secret and environment variables in the pipeline
-    - By agnostic, I mean that the method should also work if I run it without Prefect/Airflow, and/or can be migrated easily between Prefect and Airflow
-    - I consider using monkey patching for this (e.g. use the same API as used by Prefect, but using my own implementation when not running on Prefect)
 - (❎) Check backward compatibility with MLFlow 2
     - This is optional, but many companies are probably still using MLFlow 2, so it may be worth investigating
     - Currently, the training and evaluation process relies on "logged model", which allows saving model per step (without nested runs) and has expanded search filters, but not available on MLFlow 2
@@ -52,5 +49,8 @@
     - Don't pass secret between tasks as parameter. This is actually pretty easy, but kinda demotivating to do the rewrite
     - Passing secret between functions on the lower code may be fine since it's only passed locally, but between tasks (over the network) is considered dangerous
     - Use `SecretStr` and implement `dump_with_secret` function on the Pydantic model?
+- (❎) Research agnostic way to store and pass secret and environment variables in the pipeline
+    - By agnostic, I mean that the method should also work if I run it without Prefect/Airflow, and/or can be migrated easily between Prefect and Airflow
+    - I consider using monkey patching for this (e.g. use the same API as used by Prefect, but using my own implementation when not running on Prefect)
 - (❎) Explore dbt/SQLMesh to standardize the SQL input-output process, rather than hiding it somewhere deep in my code, which I may forget where in the future
     - However, I think it's not needed for this project, as the transformation used is too simple for dbt/SQLMesh to be valuable

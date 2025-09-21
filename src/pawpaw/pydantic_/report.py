@@ -7,7 +7,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class ReportConf(BaseSettings):
-    """Database credentials used to write the drift monitoring report."""
+    """Database credentials used to write the drift monitoring report.
+
+    Args:
+        host (str): Endpoint URL. Defaults to 'http://localhost:5432'.
+        database (str): Database name.
+        username (str): Username to log in to the database.
+        password (str): Password.
+    """
 
     model_config = SettingsConfigDict(validate_by_name = True, validate_default = False, extra = 'allow')
 
@@ -26,7 +33,8 @@ class ReportConf(BaseSettings):
 
 
 class ReportSchema(BaseModel):
-    """Report (`DataFrame`) schema to be uploaded to database."""
+    """Report (`DataFrame`) schema to be uploaded to database (e.g. the average metric
+    score, alert ratio, and the alert conclusion itself)."""
 
     time: datetime
     run_id_current: str

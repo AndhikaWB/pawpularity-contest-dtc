@@ -45,7 +45,7 @@ class Server:
         return ModelInfo(
             source = version.source,
             version = version.version,
-            variant = version.tags['variant']
+            variant = version.tags.get('variant')
         )
     
     def __load_model(self, model_uri: str, mlf_cfg: MLFlowConf):

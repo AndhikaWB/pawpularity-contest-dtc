@@ -61,17 +61,29 @@ class ServerRequest(BaseModel):
 
 
 class ModelInfo(BaseModel):
-    """Model info that generated the prediction result."""
+    """Model info that generated the prediction result.
+
+    Args:
+        source (str): Model source URI.
+        version (str): Model version.
+        variant (str | None): Model variant name (if exist).
+    """
 
     model_config = ConfigDict(validate_default = False)
 
     source: Annotated[str, Field(exclude = True)] = None
     version: str
-    variant: str
+    variant: str | None
 
 
 class ServerResponse(BaseModel):
-    """Response of the request, containing model info and prediction result."""
+    """Response of the request, containing model info and prediction result.
+
+    Args:
+        model (str): Model info (source, version, and variant).
+        result (float | list): Model prediction result (as list if there are multiple
+            rows).
+    """
 
     model: ModelInfo
     result: float | list
